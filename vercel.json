@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "crons": [
+    {
+      "path": "/world-cup/api/cron/sync",
+      "schedule": "*/10 * * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/world-cup",
+      "destination": "/api?path="
+    },
+    {
+      "source": "/world-cup/:path*",
+      "destination": "/api?path=:path*"
+    }
+  ]
+}

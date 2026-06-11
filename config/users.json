@@ -1,0 +1,64 @@
+{
+  "users": [
+    {
+      "id": "admin",
+      "username": "admin",
+      "password": "gy860624",
+      "name": "总管理员",
+      "role": "admin",
+      "initialChips": 50000,
+      "cards": {
+        "2": 3,
+        "3": 2
+      }
+    },
+    {
+      "id": "ops",
+      "username": "superchao",
+      "password": "zhaofanchao123456",
+      "name": "运营管理员",
+      "role": "admin",
+      "initialChips": 50000,
+      "cards": {
+        "2": 3,
+        "3": 2
+      }
+    },
+    {
+      "id": "player1",
+      "username": "fanyong",
+      "password": "fanyong123456",
+      "name": "范",
+      "role": "player",
+      "initialChips": 50000,
+      "cards": {
+        "2": 3,
+        "3": 2
+      }
+    },
+    {
+      "id": "player2",
+      "username": "shishuo",
+      "password": "shishuo123456",
+      "name": "玩家二",
+      "role": "player",
+      "initialChips": 50000,
+      "cards": {
+        "2": 3,
+        "3": 2
+      }
+    },
+    {
+      "id": "player3",
+      "username": "zhongshan",
+      "password": "zhongshan123456",
+      "name": "玩家三",
+      "role": "player",
+      "initialChips": 50000,
+      "cards": {
+        "2": 3,
+        "3": 2
+      }
+    }
+  ]
+}

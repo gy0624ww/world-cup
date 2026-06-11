@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 360" role="img" aria-labelledby="title desc">
+  <title id="title">冠军奖杯</title>
+  <desc id="desc">金色世界杯冠军奖杯风格图形</desc>
+  <defs>
+    <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fff0a3"/>
+      <stop offset="0.28" stop-color="#ffbf54"/>
+      <stop offset="0.68" stop-color="#e3982d"/>
+      <stop offset="1" stop-color="#ffe08a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="40%" r="60%">
+      <stop offset="0" stop-color="#f9c15f" stop-opacity=".75"/>
+      <stop offset=".55" stop-color="#4ade80" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#051424" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="280" height="360" fill="url(#glow)"/>
+  <path fill="#0b1727" opacity=".72" d="M76 326h128l16 22H60l16-22Z"/>
+  <path fill="url(#gold)" d="M112 257h56l9 65H103l9-65Z"/>
+  <path fill="url(#gold)" d="M90 221h100c-5 28-26 48-50 48s-45-20-50-48Z"/>
+  <path fill="url(#gold)" d="M71 57c-23 11-37 34-37 61 0 41 32 76 75 85-8-18-13-39-14-62-19-6-31-23-31-43 0-12 4-24 12-32 3-3 2-8-5-9Zm138 0c23 11 37 34 37 61 0 41-32 76-75 85 8-18 13-39 14-62 19-6 31-23 31-43 0-12-4-24-12-32-3-3-2-8 5-9Z"/>
+  <path fill="url(#gold)" d="M82 30h116c-1 103-21 187-58 187S83 133 82 30Z"/>
+  <path fill="#fff5bd" opacity=".58" d="M115 47c-5 58 0 111 17 145-27-19-39-83-40-145h23Z"/>
+  <path fill="#6ee7a0" opacity=".55" d="M158 64c18 8 31 29 31 55 0 32-19 58-43 60 14-30 17-73 12-115Z"/>
+  <path fill="#0a1322" opacity=".28" d="M90 221h100c-1 7-3 13-6 19H96c-3-6-5-12-6-19Z"/>
+  <circle cx="140" cy="36" r="8" fill="#fff7c5"/>
+</svg>

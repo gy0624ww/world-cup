@@ -1,0 +1,26 @@
+{
+  "basePath": "/world-cup",
+  "port": 3008,
+  "sourceUrl": "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json",
+  "matchDurationMinutes": 120,
+  "timezoneLabel": "America/Chicago",
+  "defaultOdds": {
+    "home": 1.95,
+    "draw": 3.25,
+    "away": 3.8
+  },
+  "oddsProvider": {
+    "enabled": true,
+    "provider": "the-odds-api",
+    "apiKeyEnv": "THE_ODDS_API_KEY",
+    "sportKey": "soccer_fifa_world_cup",
+    "regions": "us,uk,eu",
+    "markets": "h2h",
+    "oddsFormat": "decimal",
+    "bookmakerPriority": [
+      "betmgm"
+    ],
+    "strictBookmaker": true
+  },
+  "oddsOverrides": {}
+}

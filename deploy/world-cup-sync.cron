@@ -1,0 +1,4 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+*/10 * * * * root cd /data/www/world-cup && /usr/local/bin/node scripts/sync-schedule.js >> /var/log/world-cup-sync.log 2>&1

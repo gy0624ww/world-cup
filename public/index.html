@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="worldcup">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="base-path" content="/world-cup">
+    <meta name="description" content="多人世界杯竞猜、赛程、对阵图和筹码结算平台。">
+    <title>World Cup 竞猜中心</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="./assets/styles.css?v=20260612d">
+  </head>
+  <body>
+    <div id="login-screen" class="login-screen">
+      <div class="login-fx" aria-hidden="true">
+        <span class="login-hud-line login-hud-line-a"></span>
+        <span class="login-hud-line login-hud-line-b"></span>
+        <span class="login-hud-line-v login-hud-line-c"></span>
+        <span class="login-hud-symbol login-hud-ball">⚽</span>
+        <span class="login-hud-symbol login-hud-cup">🏆</span>
+      </div>
+      <div class="login-panel">
+        <div class="login-art" aria-hidden="true">
+          <img class="login-crest" src="./assets/pe-crest.png" alt="">
+          <div class="login-art-copy">
+            <strong>掌握每场比赛</strong>
+            <span>专业级赔率，闪电般的速度。加入精英玩家的行列。</span>
+          </div>
+        </div>
+        <form id="login-form" class="login-card">
+          <div class="login-form-head">
+            <h1>登录</h1>
+            <p>欢迎回到你的主场。请输入凭证。</p>
+          </div>
+          <label class="login-field">
+            <span>电子邮箱 / 用户名</span>
+            <span class="login-input-wrap">
+              <span class="field-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+              </span>
+              <input id="login-username" name="username" autocomplete="username" placeholder="请输入用户名" required>
+            </span>
+          </label>
+          <label class="login-field">
+            <span>密码</span>
+            <span class="login-input-wrap">
+              <span class="field-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><path d="M12 15v2"/></svg>
+              </span>
+              <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+            </span>
+          </label>
+          <label class="remember-row">
+            <input id="remember-me" name="remember" type="checkbox">
+            <span>记住我</span>
+          </label>
+          <button class="login-submit" type="submit">进入赛事</button>
+          <div class="login-divider"></div>
+          <p id="login-error" class="form-error" role="alert"></p>
+        </form>
+      </div>
+    </div>
+
+    <div id="app-shell" class="app-shell hidden">
+      <aside id="side-nav" class="side-nav">
+        <button class="icon-btn nav-collapse" data-action="toggle-nav" aria-label="收起导航">☰</button>
+        <div class="profile-block">
+          <div class="avatar-ring" id="profile-initial">W</div>
+          <div class="profile-copy">
+            <strong id="profile-name">Player</strong>
+            <span id="profile-role">Elite Tier</span>
+          </div>
+        </div>
+        <nav class="menu-nav">
+          <button class="nav-item active" data-view="matches"><span>⚽</span><b>赛事中心</b></button>
+          <button class="nav-item" data-view="bracket"><span>🏆</span><b>对阵图</b></button>
+          <button class="nav-item" data-view="bets"><span>▣</span><b>我的投注</b></button>
+          <button class="nav-item admin-only" data-view="admin"><span>⚙</span><b>结果管理</b></button>
+          <button class="nav-item admin-only" data-view="config"><span>☷</span><b>系统配置</b></button>
+        </nav>
+        <div class="side-foot">
+          <button class="nav-item" data-action="logout"><span>↩</span><b>退出登录</b></button>
+        </div>
+      </aside>
+
+      <main class="main-stage">
+        <header class="topbar">
+          <div>
+            <p class="kicker">FOOTBALL</p>
+            <h2>世界杯竞猜</h2>
+            <div id="sync-meta" class="sync-meta"></div>
+          </div>
+          <div class="top-actions">
+            <div class="chip-pill">
+              <span>筹码</span>
+              <strong id="chip-balance">0</strong>
+            </div>
+            <button class="btn cyber-slip-btn btn-sm" data-action="toggle-slip">
+              <span class="cyber-slip-dot"></span>
+              <span>投注单</span>
+            </button>
+          </div>
+        </header>
+
+        <section id="view-matches" class="view-panel active">
+          <div id="stats-strip" class="stats-strip"></div>
+          <div class="section-heading">
+            <div>
+              <p class="kicker">MATCH CENTER</p>
+              <h3>进行中 & 即将开始</h3>
+            </div>
+            <div class="join filter-tabs">
+              <button class="btn join-item btn-sm active" data-filter="all">全部</button>
+              <button class="btn join-item btn-sm" data-filter="live">LIVE</button>
+              <button class="btn join-item btn-sm" data-filter="scheduled">未开赛</button>
+              <button class="btn join-item btn-sm" data-filter="finished">已结束</button>
+            </div>
+          </div>
+          <div id="matches-grid" class="matches-grid"></div>
+        </section>
+
+        <section id="view-bracket" class="view-panel">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">TOURNAMENT MAP</p>
+              <h3>世界杯完整对阵图</h3>
+            </div>
+          </div>
+          <div id="bracket-board" class="bracket-board"></div>
+        </section>
+
+        <section id="view-bets" class="view-panel">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">BET HISTORY</p>
+              <h3>我的投注</h3>
+            </div>
+          </div>
+          <div id="bet-dashboard" class="bet-dashboard"></div>
+          <div id="bets-view-list" class="history-list"></div>
+        </section>
+
+        <section id="view-admin" class="view-panel admin-only">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">ADMIN</p>
+              <h3>赛果与赔率管理</h3>
+            </div>
+            <button class="btn btn-secondary btn-sm" data-action="sync-schedule">同步赛程</button>
+          </div>
+          <form id="admin-form" class="admin-panel"></form>
+        </section>
+
+        <section id="view-config" class="view-panel admin-only">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">CONFIG</p>
+              <h3>系统配置</h3>
+            </div>
+            <button class="btn btn-outline btn-sm" data-action="load-config">刷新配置</button>
+          </div>
+          <form id="config-form" class="config-panel"></form>
+        </section>
+      </main>
+
+      <aside id="bet-slip" class="bet-slip">
+        <button class="slip-toggle" data-action="toggle-slip" aria-label="展开或收起投注单">›</button>
+        <div class="slip-content">
+          <div class="slip-head">
+            <div>
+              <p class="kicker">MY BETSLIP</p>
+              <h3>我的投注</h3>
+            </div>
+          </div>
+          <div id="selected-match" class="selected-match"></div>
+          <form id="bet-form" class="bet-form">
+            <div id="market-buttons" class="market-buttons"></div>
+            <label class="form-control">
+              <span class="label-text">投注金额</span>
+              <input id="stake-input" class="input input-bordered" type="number" min="1" step="1" value="1000">
+            </label>
+            <div>
+              <span class="label-text">倍数加成</span>
+              <div id="multiplier-buttons" class="multiplier-buttons"></div>
+            </div>
+            <div class="estimate-line">
+              <span>预计收益</span>
+              <strong id="payout-estimate">0</strong>
+            </div>
+            <button id="submit-bet" class="btn btn-primary w-full" type="submit">确认下注</button>
+            <button id="cancel-edit" class="btn btn-ghost btn-sm hidden" type="button" data-action="clear-edit">取消编辑</button>
+            <p id="bet-error" class="form-error" role="alert"></p>
+          </form>
+          <div class="slip-section">
+            <div class="slip-section-title">最近记录</div>
+            <div id="bets-list" class="history-list compact"></div>
+          </div>
+          <div class="slip-section">
+            <div class="slip-section-title">排行榜</div>
+            <div id="leaderboard" class="leaderboard"></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div id="toast" class="toast toast-end"></div>
+    <script src="./assets/app.js?v=20260612d" type="module"></script>
+  </body>
+</html>
