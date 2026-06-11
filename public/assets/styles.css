@@ -144,6 +144,30 @@ select {
   display: none !important;
 }
 
+.auth-loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(70, 223, 114, .16), transparent 18rem),
+    linear-gradient(135deg, #04101f, #071626 45%, #081f2c);
+  color: var(--green);
+}
+
+.auth-loading-mark {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .82rem;
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+body:not(.auth-loading) .auth-loading-screen {
+  display: none;
+}
+
 .kicker {
   margin: 0 0 .25rem;
   color: var(--green);

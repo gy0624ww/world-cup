@@ -13,11 +13,11 @@ npm start
 
 ## 示例账号
 
-- `admin` / `admin2026`，管理员
-- `ops` / `ops2026`，管理员
-- `player1` / `player12026`
-- `player2` / `player22026`
-- `player3` / `player32026`
+- `admin` / `gy860624`，管理员
+- `superchao` / `zhaofanchao123456`，管理员
+- `fanyong` / `fanyong123456`
+- `shishuo` / `shishuo123456`
+- `zhongshan` / `zhongshan123456`
 
 账号、固定密码、初始筹码和倍数卡数量可以由管理员在“系统配置”里维护，也可以直接编辑 `config/users.json`。
 
@@ -51,12 +51,13 @@ Vercel 环境变量：
 
 - `KV_REST_API_URL`：Vercel KV / Upstash Redis REST URL，用于持久保存投注、登录会话、管理员配置和同步缓存。
 - `KV_REST_API_TOKEN`：Vercel KV / Upstash Redis REST Token。
+- `REDIS_URL`：可选。如果通过 Vercel Marketplace 绑定 Redis 且只注入了 `REDIS_URL`，项目会自动使用它作为持久存储。
 - `CRON_SECRET`：定时任务密钥。Vercel Cron 会用 `Authorization: Bearer $CRON_SECRET` 调用同步接口。
 - `THE_ODDS_API_KEY`：可选，用于同步 The Odds API 赔率；不配置时会跳过赔率同步。
 
 `vercel.json` 已配置：
 
 - `/world-cup` 和 `/world-cup/*` rewrite 到 Serverless API。
-- 每 10 分钟执行一次 `/world-cup/api/cron/sync`，同步赛程、结算已完成比赛并同步赔率。
+- 每天执行一次 `/world-cup/api/cron/sync`，同步赛程、结算已完成比赛并同步赔率。Vercel Hobby 计划只支持每日 Cron；如升级到 Pro，可把 `vercel.json` 里的 schedule 改回更高频率。
 
-首次部署前，在 Vercel 项目里添加 KV 存储并绑定这些环境变量。没有 KV 时，本地仍会使用 `data/state.json`，但 Vercel 上的运行时写入不会可靠持久化。
+首次部署前，在 Vercel 项目里添加 KV 存储并绑定这些环境变量。没有 KV 时，本地仍会使用 `data/state.json`；Vercel 上会退回到函数实例内存态，页面可用，但投注、登录会话和管理员配置不会可靠持久化。

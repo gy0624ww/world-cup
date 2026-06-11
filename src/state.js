@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
+import net from "node:net";
 import path from "node:path";
+import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import {
   normalizeMatches,
@@ -14,7 +16,12 @@ const dataDir = path.join(rootDir, "data");
 const statePath = path.join(dataDir, "state.json");
 const kvUrl = process.env.KV_REST_API_URL || "";
 const kvToken = process.env.KV_REST_API_TOKEN || "";
+const redisUrl = process.env.REDIS_URL || "";
 const kvPrefix = process.env.WC_KV_PREFIX || "world-cup";
+const memoryStore = new Map();
+const hasRestStorage = Boolean(kvUrl && kvToken);
+const hasRedisStorage = Boolean(redisUrl);
+const useMemoryStorage = Boolean(process.env.VERCEL) && !hasRestStorage && !hasRedisStorage;
 const ODDS_PROVIDER_SOURCE = "the-odds-api";
 const ODDS_ALIAS = new Map([
   ["usa", "united-states"],
@@ -41,6 +48,10 @@ export async function readJson(filePath, fallback) {
     const stored = await kvCommand(["GET", key]);
     if (stored !== null && stored !== undefined) return JSON.parse(stored);
   }
+  const memoryKey = inMemoryKey(filePath);
+  if (memoryKey && memoryStore.has(memoryKey)) {
+    return structuredClone(memoryStore.get(memoryKey));
+  }
   try {
     return JSON.parse(await fs.readFile(filePath, "utf8"));
   } catch (error) {
@@ -55,13 +66,26 @@ export async function writeJson(filePath, value) {
     await kvCommand(["SET", key, JSON.stringify(value)]);
     return;
   }
+  const memoryKey = inMemoryKey(filePath);
+  if (memoryKey) {
+    memoryStore.set(memoryKey, structuredClone(value));
+    return;
+  }
   const tempPath = `${filePath}.${process.pid}.tmp`;
   await fs.writeFile(tempPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   await fs.rename(tempPath, filePath);
 }
 
+function inMemoryKey(filePath) {
+  if (!useMemoryStorage) return null;
+  const relative = path.relative(rootDir, filePath);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return null;
+  if (!relative.startsWith("data/") && !relative.startsWith("config/")) return null;
+  return relative.replaceAll(path.sep, "/");
+}
+
 function storageKey(filePath) {
-  if (!kvUrl || !kvToken) return null;
+  if (!hasRestStorage && !hasRedisStorage) return null;
   const relative = path.relative(rootDir, filePath);
   if (relative.startsWith("..") || path.isAbsolute(relative)) return null;
   if (!relative.startsWith("data/") && !relative.startsWith("config/")) return null;
@@ -69,6 +93,9 @@ function storageKey(filePath) {
 }
 
 async function kvCommand(command) {
+  if (hasRedisStorage && !hasRestStorage) {
+    return redisCommand(command);
+  }
   const response = await fetch(kvUrl, {
     method: "POST",
     headers: {
@@ -84,6 +111,114 @@ async function kvCommand(command) {
   const payload = await response.json();
   if (payload.error) throw new Error(`KV 请求失败: ${payload.error}`);
   return payload.result;
+}
+
+async function redisCommand(command) {
+  const url = new URL(redisUrl);
+  const port = Number(url.port || (url.protocol === "rediss:" ? 6380 : 6379));
+  const password = decodeURIComponent(url.password || "");
+  const username = decodeURIComponent(url.username || "");
+  const socket = url.protocol === "rediss:"
+    ? tls.connect({ host: url.hostname, port, servername: url.hostname })
+    : net.connect({ host: url.hostname, port });
+
+  let buffer = Buffer.alloc(0);
+  let settled = false;
+
+  const writeCommand = (parts) => {
+    const payload = [
+      `*${parts.length}\r\n`,
+      ...parts.flatMap((part) => {
+        const text = String(part);
+        return [`$${Buffer.byteLength(text)}\r\n`, `${text}\r\n`];
+      })
+    ].join("");
+    socket.write(payload);
+  };
+
+  const readResponse = () => new Promise((resolve, reject) => {
+    const cleanup = () => {
+      socket.off("data", onData);
+      socket.off("error", onError);
+    };
+    const onError = (error) => {
+      cleanup();
+      reject(error);
+    };
+    const tryParse = () => {
+      try {
+        const parsed = parseRedisResponse(buffer);
+        if (!parsed) return;
+        buffer = buffer.subarray(parsed.offset);
+        cleanup();
+        resolve(parsed.value);
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
+    };
+    const onData = (chunk) => {
+      buffer = Buffer.concat([buffer, chunk]);
+      tryParse();
+    };
+
+    socket.on("data", onData);
+    socket.once("error", onError);
+    tryParse();
+  });
+
+  try {
+    await new Promise((resolve, reject) => {
+      socket.once(url.protocol === "rediss:" ? "secureConnect" : "connect", resolve);
+      socket.once("error", reject);
+    });
+    if (password) {
+      writeCommand(username ? ["AUTH", username, password] : ["AUTH", password]);
+      const auth = await readResponse();
+      if (auth !== "OK") throw new Error("Redis 认证失败");
+    }
+    writeCommand(command);
+    const result = await readResponse();
+    settled = true;
+    return result;
+  } finally {
+    if (!settled) socket.destroy();
+    else socket.end();
+  }
+}
+
+function parseRedisResponse(buffer, offset = 0) {
+  if (offset >= buffer.length) return null;
+  const prefix = String.fromCharCode(buffer[offset]);
+  const lineEnd = buffer.indexOf("\r\n", offset);
+  if (lineEnd === -1) return null;
+  const line = buffer.subarray(offset + 1, lineEnd).toString("utf8");
+  const next = lineEnd + 2;
+
+  if (prefix === "+") return { value: line, offset: next };
+  if (prefix === "-") throw new Error(`Redis 请求失败: ${line}`);
+  if (prefix === ":") return { value: Number(line), offset: next };
+  if (prefix === "$") {
+    const length = Number(line);
+    if (length === -1) return { value: null, offset: next };
+    const end = next + length;
+    if (buffer.length < end + 2) return null;
+    return { value: buffer.subarray(next, end).toString("utf8"), offset: end + 2 };
+  }
+  if (prefix === "*") {
+    const count = Number(line);
+    if (count === -1) return { value: null, offset: next };
+    const values = [];
+    let cursor = next;
+    for (let index = 0; index < count; index += 1) {
+      const parsed = parseRedisResponse(buffer, cursor);
+      if (!parsed) return null;
+      values.push(parsed.value);
+      cursor = parsed.offset;
+    }
+    return { value: values, offset: cursor };
+  }
+  throw new Error("Redis 返回格式异常");
 }
 
 export async function loadConfig() {

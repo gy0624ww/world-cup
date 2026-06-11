@@ -1,6 +1,7 @@
 const BASE_PATH = document.querySelector('meta[name="base-path"]')?.content || "/world-cup";
 const els = {
   login: document.querySelector("#login-screen"),
+  loading: document.querySelector("#auth-loading-screen"),
   loginForm: document.querySelector("#login-form"),
   loginError: document.querySelector("#login-error"),
   app: document.querySelector("#app-shell"),
@@ -368,12 +369,16 @@ async function api(path, options = {}) {
 }
 
 function showLogin() {
+  document.body.classList.remove("auth-loading");
+  els.loading.classList.add("hidden");
   els.login.classList.remove("hidden");
   els.app.classList.add("hidden");
   if (appState.polling) clearInterval(appState.polling);
 }
 
 function showApp() {
+  document.body.classList.remove("auth-loading");
+  els.loading.classList.add("hidden");
   els.login.classList.add("hidden");
   els.app.classList.remove("hidden");
 }

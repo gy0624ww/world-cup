@@ -523,6 +523,8 @@ export async function handleRequest(req, res) {
   }
 }
 
+export default handleRequest;
+
 const server = http.createServer(handleRequest);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
