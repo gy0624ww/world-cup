@@ -119,6 +119,15 @@ test("locks betting after kickoff", () => {
   );
 });
 
+test("locks betting exactly at kickoff", () => {
+  const { state, now } = fixture();
+  state.sourceCache.matches[0].startAt = new Date(now).toISOString();
+  assert.throws(
+    () => createBet(state, config, "u1", { matchId: "m1", pick: "home", stake: 100, multiplier: 1 }, now),
+    /已经开始/
+  );
+});
+
 test("settles wins with odds first and multiplier after odds", () => {
   const { state, now } = fixture();
   const bet = createBet(state, config, "u1", { matchId: "m1", pick: "home", stake: 100, multiplier: 2 }, now);
