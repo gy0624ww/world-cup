@@ -177,14 +177,14 @@
             </div>
           </div>
           <div id="selected-match" class="selected-match"></div>
-          <form id="bet-form" class="bet-form">
+          <form id="bet-form" class="bet-form" novalidate>
             <div id="market-buttons" class="market-buttons"></div>
             <label class="form-control">
               <span class="label-text">投注金额</span>
-              <input id="stake-input" class="input input-bordered" type="number" min="1" step="1" value="1000">
+              <input id="stake-input" class="input input-bordered" type="number" min="1" max="50" step="1" value="25">
             </label>
             <div>
-              <span class="label-text">倍数加成</span>
+              <span class="label-text">快捷金额</span>
               <div id="multiplier-buttons" class="multiplier-buttons"></div>
             </div>
             <div class="estimate-line">
@@ -208,6 +208,6 @@
     </div>
 
     <div id="toast" class="toast toast-end"></div>
-    <script src="./assets/app.js?v=20260612e" type="module"></script>
+    <script src="./assets/app.js?v=20260612f" type="module"></script>
   </body>
 </html>

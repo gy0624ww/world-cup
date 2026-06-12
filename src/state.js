@@ -4,7 +4,9 @@ import path from "node:path";
 import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import {
+  applyAutoDeductions,
   normalizeMatches,
+  normalizeOpenBetMultipliers,
   settleFinishedMatches,
   slug
 } from "./core.js";
@@ -23,6 +25,7 @@ const hasRestStorage = Boolean(kvUrl && kvToken);
 const hasRedisStorage = Boolean(redisUrl);
 const useMemoryStorage = Boolean(process.env.VERCEL) && !hasRestStorage && !hasRedisStorage;
 const ODDS_PROVIDER_SOURCE = "the-odds-api";
+const BETTING_RULE_VERSION = 2;
 const ODDS_ALIAS = new Map([
   ["usa", "united-states"],
   ["u-s-a", "united-states"],
@@ -269,7 +272,8 @@ export async function loadState(config) {
   state.oddsCache ||= initialOddsCache();
   state.oddsCache.matches ||= {};
   seedUsers(state, config);
-  normalizeUserCards(state, config);
+  migrateBettingRules(state, config);
+  normalizeOpenBetMultipliers(state);
   if (!state.sourceCache.matches?.length) {
     try {
       await syncSchedule(state, config);
@@ -277,6 +281,7 @@ export async function loadState(config) {
       await loadSeedSchedule(state, config, error);
     }
   }
+  applyAutoDeductions(state, config);
   settleFinishedMatches(state, config);
   await saveState(state);
   return state;
@@ -290,48 +295,30 @@ export function seedUsers(state, config) {
         username: user.username,
         name: user.name,
         role: user.role || "player",
-        chips: Number(user.initialChips || 0),
-        cards: {
-          "2": Number(user.cards?.["2"] || 0),
-          "3": Number(user.cards?.["3"] || 0)
-        }
+        chips: Number(user.initialChips || 0)
       };
     } else {
       state.users[user.id].username = user.username;
       state.users[user.id].name = user.name;
       state.users[user.id].role = user.role || "player";
-      state.users[user.id].cards ||= { "2": 0, "3": 0 };
-      state.users[user.id].cards["2"] ??= 0;
-      state.users[user.id].cards["3"] ??= 0;
+      delete state.users[user.id].cards;
     }
   }
 }
 
-export function normalizeUserCards(state, config) {
-  const configuredCards = new Map(
-    config.users.map((user) => [
-      user.id,
-      {
-        "2": Number(user.cards?.["2"] || 0),
-        "3": Number(user.cards?.["3"] || 0)
-      }
-    ])
-  );
-
+export function migrateBettingRules(state, config) {
+  if (Number(state.bettingRuleVersion || 1) >= BETTING_RULE_VERSION) return false;
+  const configuredUsers = new Map(config.users.map((user) => [user.id, user]));
   for (const user of Object.values(state.users)) {
-    const base = configuredCards.get(user.id);
-    if (!base) continue;
-    const used = { "2": 0, "3": 0 };
-    for (const bet of state.bets || []) {
-      if (bet.userId !== user.id || bet.status === "cancelled") continue;
-      const card = String(bet.multiplier || 1);
-      if (card === "2" || card === "3") used[card] += 1;
+    const configured = configuredUsers.get(user.id);
+    if (configured) {
+      user.chips = Number(configured.initialChips || 0);
     }
-    user.cards = {
-      "2": Math.max(0, base["2"] - used["2"]),
-      "3": Math.max(0, base["3"] - used["3"])
-    };
+    delete user.cards;
   }
+  normalizeOpenBetMultipliers(state);
+  state.bettingRuleVersion = BETTING_RULE_VERSION;
+  return true;
 }
 
 export function reconcileUsers(state, users) {
@@ -352,11 +339,7 @@ export function reconcileUsers(state, users) {
       username: user.username,
       name: user.name,
       role: user.role || "player",
-      chips: Number(user.initialChips || 0),
-      cards: {
-        "2": Number(user.cards?.["2"] || 0),
-        "3": Number(user.cards?.["3"] || 0)
-      }
+      chips: Number(user.initialChips || 0)
     };
   }
 }
@@ -582,8 +565,7 @@ export function publicUser(stateUser) {
     username: stateUser.username,
     name: stateUser.name,
     role: stateUser.role,
-    chips: stateUser.chips,
-    cards: stateUser.cards
+    chips: stateUser.chips
   };
 }
 

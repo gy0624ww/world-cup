@@ -43,7 +43,7 @@ const appState = {
   selectedMatchId: null,
   selectedPick: "home",
   selectedMultiplier: 1,
-  stake: 1000,
+  stake: 25,
   editingBetId: null,
   filter: "all",
   view: "matches",
@@ -70,7 +70,8 @@ const betStatusLabels = {
   open: "待结算",
   settled: "已赢",
   lost: "未中",
-  cancelled: "已取消"
+  cancelled: "已取消",
+  deducted: "已扣除"
 };
 
 const teamFlags = {
@@ -313,6 +314,7 @@ function winnerLabel(match) {
 }
 
 function returnLabel(bet) {
+  if (bet.type === "auto-deduction") return `-${formatNumber(bet.stake)}`;
   if (bet.status === "settled") return `+${formatNumber(bet.payout)}`;
   if (bet.status === "lost") return "0";
   if (bet.status === "cancelled") return "已取消";
@@ -320,7 +322,7 @@ function returnLabel(bet) {
 }
 
 function calculateBetDashboard(bets) {
-  const activeBets = bets.filter((bet) => bet.status !== "cancelled");
+  const activeBets = bets.filter((bet) => bet.status !== "cancelled" && bet.type !== "auto-deduction");
   const settledBets = activeBets.filter((bet) => bet.status === "settled" || bet.status === "lost");
   const wonBets = activeBets.filter((bet) => bet.status === "settled");
   const totalWagered = activeBets.reduce((sum, bet) => sum + Number(bet.stake || 0), 0);
@@ -609,7 +611,7 @@ function renderSlip() {
   els.marketButtons.innerHTML = ["home", "draw", "away"]
     .map((pick) => renderSlipMarketButton(match, pick))
     .join("");
-  els.multiplierButtons.innerHTML = [1, 2, 3].map((value) => renderMultiplierButton(value, bet)).join("");
+  els.multiplierButtons.innerHTML = [1, 25, 50].map((value) => renderQuickStakeButton(value)).join("");
   els.stakeInput.value = appState.stake;
   els.cancelEdit.classList.toggle("hidden", !appState.editingBetId);
   els.submitBet.textContent = appState.editingBetId ? "保存修改" : duplicateBlocked ? "已下注" : "确认下注";
@@ -627,18 +629,13 @@ function renderSlipMarketButton(match, pick) {
   `;
 }
 
-function renderMultiplierButton(value, bet) {
-  const available = value === 1
-    ? 1
-    : Number(appState.user?.cards?.[String(value)] || 0) + (bet?.multiplier === value ? 1 : 0);
-  const disabled = value !== 1 && available <= 0;
-  const label = value === 1 ? "默认" : `剩 ${available} 张`;
-  const stateText = disabled ? "已用完" : appState.selectedMultiplier === value ? "SELECTED" : "AVAILABLE";
+function renderQuickStakeButton(value) {
+  const active = Number(appState.stake) === value;
   return `
-    <button class="multiplier-btn ${appState.selectedMultiplier === value ? "active" : ""} ${disabled ? "used" : ""}" data-action="select-multiplier" data-multiplier="${value}" data-disabled="${disabled ? "true" : "false"}" type="button" aria-disabled="${disabled ? "true" : "false"}">
-      <span class="multiplier-state">${stateText}</span>
-      <span class="multiplier-main">${value}x <small>${label}</small></span>
-      <span class="multiplier-watermark">${value === 1 ? "1x" : value === 2 ? "⚡" : "★"}</span>
+    <button class="multiplier-btn quick-stake-btn ${active ? "active" : ""}" data-action="select-quick-stake" data-stake="${value}" type="button">
+      <span class="multiplier-state">${active ? "SELECTED" : "QUICK"}</span>
+      <span class="multiplier-main">${value} <small>筹码</small></span>
+      <span class="multiplier-watermark">${value}</span>
     </button>
   `;
 }
@@ -651,7 +648,7 @@ function updateEstimate() {
   }
   appState.stake = Number(els.stakeInput.value || appState.stake || 0);
   const odds = match.odds[appState.selectedPick] || 0;
-  const payout = appState.stake * odds * appState.selectedMultiplier;
+  const payout = appState.stake * odds;
   els.payoutEstimate.textContent = `${formatNumber(payout)} 筹码`;
 }
 
@@ -701,6 +698,7 @@ function renderBetDashboard() {
 }
 
 function renderBetHistoryCard(bet) {
+  if (bet.type === "auto-deduction") return renderAutoDeductionHistoryCard(bet);
   const match = bet.match || appState.matches.find((item) => item.id === bet.matchId) || {};
   const parts = formatBetDateParts(bet.createdAt || match.startAt || new Date().toISOString());
   const canEdit = bet.status === "open" && !match.locked;
@@ -736,10 +734,6 @@ function renderBetHistoryCard(bet) {
         <span>筹码</span>
         <strong>${formatNumber(bet.stake)}</strong>
       </div>
-      <div class="history-detail">
-        <span>倍率</span>
-        <strong>${bet.multiplier}x</strong>
-      </div>
       <div class="history-detail history-return">
         <span>返回</span>
         <strong>${escapeHtml(returnLabel(bet))}</strong>
@@ -756,6 +750,7 @@ function renderBetHistoryCard(bet) {
 }
 
 function renderBetRecord(bet) {
+  if (bet.type === "auto-deduction") return renderAutoDeductionRecord(bet);
   const match = bet.match || appState.matches.find((item) => item.id === bet.matchId) || {};
   const canEdit = bet.status === "open" && !match.locked;
   const payout = bet.status === "settled" ? `+${formatNumber(bet.payout)}` : bet.status === "lost" ? "-0" : "待结算";
@@ -766,7 +761,7 @@ function renderBetRecord(bet) {
         <strong>${escapeHtml(payout)}</strong>
       </div>
       <div class="record-meta">
-        ${marketLabels[bet.pick]} · ${formatNumber(bet.stake)} 筹码 · ${formatOdds(bet.odds)} · ${bet.multiplier}x · ${betStatusLabels[bet.status]}
+        ${marketLabels[bet.pick]} · ${formatNumber(bet.stake)} 筹码 · ${formatOdds(bet.odds)} · ${betStatusLabels[bet.status]}
       </div>
       ${canEdit ? `
         <div class="record-actions">
@@ -774,6 +769,57 @@ function renderBetRecord(bet) {
           <button class="btn btn-xs btn-ghost" data-action="cancel-bet" data-bet-id="${bet.id}" type="button">取消</button>
         </div>
       ` : ""}
+    </article>
+  `;
+}
+
+function renderAutoDeductionHistoryCard(bet) {
+  const match = bet.match || appState.matches.find((item) => item.id === bet.matchId) || {};
+  const parts = formatBetDateParts(bet.createdAt || match.startAt || new Date().toISOString());
+  return `
+    <article class="bet-history-card deducted">
+      <div class="history-date">
+        <span>${escapeHtml(parts.month)}</span>
+        <strong>${escapeHtml(parts.day)}</strong>
+      </div>
+      <div class="history-main">
+        <div class="history-headline">
+          <span class="history-type">自动扣除</span>
+          <span class="history-id">ID: #${escapeHtml(shortBetId(bet.id))}</span>
+        </div>
+        <div class="history-match">
+          <span class="history-team">${renderFlagAvatar(match.team1)}${renderTeamText(match.team1 || "待定")}</span>
+          <b>vs</b>
+          <span class="history-team">${renderFlagAvatar(match.team2)}${renderTeamText(match.team2 || "待定")}</span>
+        </div>
+        <div class="history-winner">${escapeHtml(bet.reason || "比赛开始未下注，自动扣除 25 筹码")}</div>
+      </div>
+      <div class="history-detail">
+        <span>扣除</span>
+        <strong>-${formatNumber(bet.stake)}</strong>
+      </div>
+      <div class="history-detail history-return">
+        <span>原因</span>
+        <strong>未下注</strong>
+      </div>
+      <div class="history-actions">
+        <span class="history-status history-status-deducted">${betStatusLabels[bet.status] || "已扣除"}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderAutoDeductionRecord(bet) {
+  const match = bet.match || appState.matches.find((item) => item.id === bet.matchId) || {};
+  return `
+    <article class="bet-record deducted">
+      <div class="record-top">
+        <div class="record-title">${renderTeamName(match.team1 || "待定")} <span class="versus">vs</span> ${renderTeamName(match.team2 || "待定")}</div>
+        <strong>-${formatNumber(bet.stake)}</strong>
+      </div>
+      <div class="record-meta">
+        ${escapeHtml(bet.reason || "比赛开始未下注，自动扣除 25 筹码")} · ${betStatusLabels[bet.status] || "已扣除"}
+      </div>
     </article>
   `;
 }
@@ -993,14 +1039,6 @@ function renderConfigUser(user, index) {
         <span class="label-text">筹码</span>
         <input data-field="initialChips" class="input input-bordered" type="number" min="0" value="${escapeHtml(user.initialChips)}">
       </label>
-      <label class="form-control">
-        <span class="label-text">2x 卡</span>
-        <input data-field="card2" class="input input-bordered" type="number" min="0" value="${escapeHtml(user.cards?.["2"] || 0)}">
-      </label>
-      <label class="form-control">
-        <span class="label-text">3x 卡</span>
-        <input data-field="card3" class="input input-bordered" type="number" min="0" value="${escapeHtml(user.cards?.["3"] || 0)}">
-      </label>
       <button class="btn btn-ghost btn-sm" data-action="remove-config-user" data-index="${index}" type="button">删除</button>
     </div>
   `;
@@ -1014,11 +1052,7 @@ function readConfigForm() {
     password: row.querySelector('[data-field="password"]').value,
     name: row.querySelector('[data-field="name"]').value,
     role: row.querySelector('[data-field="role"]').value,
-    initialChips: Number(row.querySelector('[data-field="initialChips"]').value),
-    cards: {
-      "2": Number(row.querySelector('[data-field="card2"]').value),
-      "3": Number(row.querySelector('[data-field="card3"]').value)
-    }
+    initialChips: Number(row.querySelector('[data-field="initialChips"]').value)
   }));
   return {
     tournament: {
@@ -1062,12 +1096,17 @@ async function submitBet(event) {
     els.betError.textContent = "每个场次只能下注一次，可在最近记录中修改未开赛注单。";
     return;
   }
+  const stake = Number(els.stakeInput.value);
+  if (!Number.isInteger(stake) || stake < 1 || stake > 50) {
+    els.betError.textContent = "投注金额必须为 1-50 的整数";
+    return;
+  }
   try {
     const payload = {
       matchId: match.id,
       pick: appState.selectedPick,
-      stake: Number(els.stakeInput.value),
-      multiplier: appState.selectedMultiplier
+      stake,
+      multiplier: 1
     };
     const response = appState.editingBetId
       ? await api(`/api/bets/${appState.editingBetId}`, { method: "PATCH", body: payload })
@@ -1198,15 +1237,9 @@ function bindEvents() {
       renderSlip();
       renderMatches();
     }
-    if (action === "select-multiplier") {
-      const nextMultiplier = Number(actionButton.dataset.multiplier);
-      if (actionButton.dataset.disabled === "true" && nextMultiplier > 1) {
-        const message = `${nextMultiplier}x 倍数卡不足`;
-        els.betError.textContent = message;
-        toast(message, "error");
-        return;
-      }
-      appState.selectedMultiplier = nextMultiplier;
+    if (action === "select-quick-stake") {
+      appState.stake = Number(actionButton.dataset.stake);
+      els.stakeInput.value = appState.stake;
       renderSlip();
     }
     if (action === "clear-edit") {
@@ -1219,7 +1252,7 @@ function bindEvents() {
         appState.editingBetId = bet.id;
         appState.selectedMatchId = bet.matchId;
         appState.selectedPick = bet.pick;
-        appState.selectedMultiplier = bet.multiplier;
+        appState.selectedMultiplier = 1;
         appState.stake = bet.stake;
         setSlipCollapsed(false);
         render();
@@ -1255,8 +1288,7 @@ function bindEvents() {
         password: `player${nextIndex}2026`,
         name: `玩家${nextIndex}`,
         role: "player",
-        initialChips: 12000,
-        cards: { "2": 3, "3": 2 }
+        initialChips: 5000
       });
       renderConfig();
     }

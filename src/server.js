@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  applyAutoDeductions,
   buildGroups,
   buildKnockout,
   cancelBet,
@@ -86,11 +87,7 @@ function sanitizeConfigPayload(body) {
       password: sanitizeText(user.password, "密码"),
       name: sanitizeText(user.name, "显示名"),
       role,
-      initialChips: Math.max(0, Math.trunc(Number(user.initialChips || 0))),
-      cards: {
-        "2": Math.max(0, Math.trunc(Number(user.cards?.["2"] || 0))),
-        "3": Math.max(0, Math.trunc(Number(user.cards?.["3"] || 0)))
-      }
+      initialChips: Math.max(0, Math.trunc(Number(user.initialChips || 0)))
     };
   });
   if (!cleanUsers.some((user) => user.role === "admin")) {
@@ -238,6 +235,7 @@ function clearCookie() {
 
 function buildBootstrap(user) {
   const now = Date.now();
+  applyAutoDeductions(state, config, now);
   settleFinishedMatches(state, config, now);
   const matches = decoratedMatches(state, config, now);
   const userBets = state.bets
@@ -329,6 +327,7 @@ async function handleApi(req, res, pathname) {
       } catch (error) {
         scheduleSync = { ok: false, error: error.message || "赛程同步失败" };
       }
+      const deductions = applyAutoDeductions(state, config);
       const settled = settleFinishedMatches(state, config);
       let oddsSync;
       try {
@@ -336,7 +335,7 @@ async function handleApi(req, res, pathname) {
       } catch (error) {
         oddsSync = { ok: false, error: error.message || "赔率同步失败" };
       }
-      return { sourceCache, scheduleSync, settledCount: settled.length, oddsSync };
+      return { sourceCache, scheduleSync, settledCount: settled.length, deductionCount: deductions.length, oddsSync };
     });
     sendJson(res, 200, { ok: true, ...result });
     return;
@@ -346,7 +345,9 @@ async function handleApi(req, res, pathname) {
     const user = requireUser(req);
     const body = await readBody(req);
     const bet = await queueMutation(async () => createBet(state, config, user.id, body));
-    sendJson(res, 201, { bet, bootstrap: buildBootstrap(user) });
+    const bootstrap = buildBootstrap(user);
+    await saveState(state);
+    sendJson(res, 201, { bet, bootstrap });
     return;
   }
 
@@ -355,14 +356,18 @@ async function handleApi(req, res, pathname) {
     const user = requireUser(req);
     const body = await readBody(req);
     const bet = await queueMutation(async () => updateBet(state, config, user.id, betMatch[1], body));
-    sendJson(res, 200, { bet, bootstrap: buildBootstrap(user) });
+    const bootstrap = buildBootstrap(user);
+    await saveState(state);
+    sendJson(res, 200, { bet, bootstrap });
     return;
   }
 
   if (betMatch && req.method === "DELETE") {
     const user = requireUser(req);
     const bet = await queueMutation(async () => cancelBet(state, user.id, betMatch[1]));
-    sendJson(res, 200, { bet, bootstrap: buildBootstrap(user) });
+    const bootstrap = buildBootstrap(user);
+    await saveState(state);
+    sendJson(res, 200, { bet, bootstrap });
     return;
   }
 
@@ -370,6 +375,7 @@ async function handleApi(req, res, pathname) {
     requireAdmin(req);
     const cache = await queueMutation(async () => {
       const synced = await syncSchedule(state, config);
+      applyAutoDeductions(state, config);
       settleFinishedMatches(state, config);
       return synced;
     });
@@ -379,8 +385,15 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/admin/sync-odds") {
     requireAdmin(req);
-    const oddsSync = await queueMutation(async () => syncOdds(state, config));
-    sendJson(res, 200, { ok: true, oddsSync, bootstrap: buildBootstrap(requireUser(req)) });
+    const oddsSync = await queueMutation(async () => {
+      const synced = await syncOdds(state, config);
+      applyAutoDeductions(state, config);
+      settleFinishedMatches(state, config);
+      return synced;
+    });
+    const bootstrap = buildBootstrap(requireUser(req));
+    await saveState(state);
+    sendJson(res, 200, { ok: true, oddsSync, bootstrap });
     return;
   }
 
@@ -410,10 +423,13 @@ async function handleApi(req, res, pathname) {
         users: next.users
       };
       reconcileUsers(state, next.users);
+      applyAutoDeductions(state, config);
       return publicConfig();
     });
     const responseUser = state.users[admin.id] || Object.values(state.users).find((user) => user.role === "admin");
-    sendJson(res, 200, { ok: true, config: updated, bootstrap: buildBootstrap(responseUser) });
+    const bootstrap = buildBootstrap(responseUser);
+    await saveState(state);
+    sendJson(res, 200, { ok: true, config: updated, bootstrap });
     return;
   }
 
@@ -443,10 +459,13 @@ async function handleApi(req, res, pathname) {
         }
       }
       state.overrides[match.id] = next;
+      applyAutoDeductions(state, config);
       if (next.status === "finished" || next.score) settleMatch(state, match);
       return state.overrides[match.id];
     });
-    sendJson(res, 200, { ok: true, override: updated, bootstrap: buildBootstrap(requireUser(req)) });
+    const bootstrap = buildBootstrap(requireUser(req));
+    await saveState(state);
+    sendJson(res, 200, { ok: true, override: updated, bootstrap });
     return;
   }
 

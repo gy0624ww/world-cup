@@ -15,6 +15,12 @@ export const ROUND_ORDER = [
   "Final"
 ];
 
+export const BET_MIN_STAKE = 1;
+export const BET_MAX_STAKE = 50;
+export const AUTO_DEDUCTION_STAKE = 25;
+export const AUTO_DEDUCTION_REASON = "比赛开始未下注，自动扣除 25 筹码";
+export const AUTO_DEDUCTION_START_DATE = "2026-06-13";
+
 export function nowIso() {
   return new Date().toISOString();
 }
@@ -179,17 +185,13 @@ export function isMatchLocked(match, now = Date.now()) {
 
 export function assertBetInput(input) {
   const stake = Number(input.stake);
-  if (!Number.isInteger(stake) || stake <= 0) {
-    throw Object.assign(new Error("投注金额必须为正整数"), { statusCode: 400 });
+  if (!Number.isInteger(stake) || stake < BET_MIN_STAKE || stake > BET_MAX_STAKE) {
+    throw Object.assign(new Error("投注金额必须为 1-50 的整数"), { statusCode: 400 });
   }
   if (!["home", "draw", "away"].includes(input.pick)) {
     throw Object.assign(new Error("请选择有效赛果"), { statusCode: 400 });
   }
-  const multiplier = Number(input.multiplier || 1);
-  if (![1, 2, 3].includes(multiplier)) {
-    throw Object.assign(new Error("倍数卡只能选择 1x、2x 或 3x"), { statusCode: 400 });
-  }
-  return { stake, pick: input.pick, multiplier };
+  return { stake, pick: input.pick, multiplier: 1 };
 }
 
 export function createBet(state, config, userId, input, now = Date.now()) {
@@ -210,13 +212,9 @@ export function createBet(state, config, userId, input, now = Date.now()) {
   if (user.chips < stake) {
     throw Object.assign(new Error("投注金额不能超过当前筹码"), { statusCode: 400 });
   }
-  if (multiplier > 1 && (user.cards?.[String(multiplier)] || 0) < 1) {
-    throw Object.assign(new Error(`${multiplier}x 倍数卡不足`), { statusCode: 400 });
-  }
 
   const odds = getOdds(match, state, config)[pick];
   user.chips -= stake;
-  if (multiplier > 1) user.cards[String(multiplier)] -= 1;
 
   const bet = {
     id: crypto.randomUUID(),
@@ -250,22 +248,13 @@ export function updateBet(state, config, userId, betId, input, now = Date.now())
     multiplier: input.multiplier ?? bet.multiplier
   });
   const user = state.users[userId];
-  const oldCard = bet.multiplier > 1 ? String(bet.multiplier) : null;
-  const nextCard = next.multiplier > 1 ? String(next.multiplier) : null;
   const availableChips = user.chips + bet.stake;
-  const availableCards = { ...(user.cards || {}) };
-  if (oldCard) availableCards[oldCard] = (availableCards[oldCard] || 0) + 1;
 
   if (availableChips < next.stake) {
     throw Object.assign(new Error("投注金额不能超过当前筹码"), { statusCode: 400 });
   }
-  if (nextCard && (availableCards[nextCard] || 0) < 1) {
-    throw Object.assign(new Error(`${next.multiplier}x 倍数卡不足`), { statusCode: 400 });
-  }
 
   user.chips = availableChips - next.stake;
-  if (nextCard) availableCards[nextCard] -= 1;
-  user.cards = availableCards;
   bet.pick = next.pick;
   bet.stake = next.stake;
   bet.multiplier = next.multiplier;
@@ -284,10 +273,6 @@ export function cancelBet(state, userId, betId, now = Date.now()) {
 
   const user = state.users[userId];
   user.chips += bet.stake;
-  if (bet.multiplier > 1) {
-    const card = String(bet.multiplier);
-    user.cards[card] = (user.cards[card] || 0) + 1;
-  }
   bet.status = "cancelled";
   bet.updatedAt = new Date(now).toISOString();
   return bet;
@@ -302,7 +287,7 @@ export function settleMatch(state, match, now = Date.now()) {
     const user = state.users[bet.userId];
     if (!user) continue;
     if (bet.pick === outcome) {
-      bet.payout = Math.round(bet.stake * bet.odds * bet.multiplier);
+      bet.payout = Math.round(bet.stake * bet.odds);
       bet.status = "settled";
       user.chips += bet.payout;
     } else {
@@ -325,6 +310,51 @@ export function settleFinishedMatches(state, config, now = Date.now()) {
     }
   }
   return settled;
+}
+
+export function normalizeOpenBetMultipliers(state) {
+  for (const bet of state.bets || []) {
+    if (bet.status === "open" && bet.type !== "auto-deduction") {
+      bet.multiplier = 1;
+    }
+  }
+}
+
+export function applyAutoDeductions(state, config, now = Date.now()) {
+  normalizeOpenBetMultipliers(state);
+  const matches = decoratedMatches(state, config, now);
+  const deductions = [];
+  for (const match of matches) {
+    if (!match.locked || match.status === "cancelled") continue;
+    if (String(match.date || "") < AUTO_DEDUCTION_START_DATE) continue;
+    for (const user of Object.values(state.users || {})) {
+      const hasRecord = (state.bets || []).some((bet) => (
+        bet.userId === user.id
+        && bet.matchId === match.id
+        && bet.status !== "cancelled"
+      ));
+      if (hasRecord) continue;
+      user.chips = Number(user.chips || 0) - AUTO_DEDUCTION_STAKE;
+      const deduction = {
+        id: crypto.randomUUID(),
+        type: "auto-deduction",
+        userId: user.id,
+        matchId: match.id,
+        pick: null,
+        stake: AUTO_DEDUCTION_STAKE,
+        odds: 0,
+        multiplier: 1,
+        status: "deducted",
+        payout: 0,
+        reason: AUTO_DEDUCTION_REASON,
+        createdAt: new Date(now).toISOString(),
+        updatedAt: new Date(now).toISOString()
+      };
+      state.bets.push(deduction);
+      deductions.push(deduction);
+    }
+  }
+  return deductions;
 }
 
 export function buildGroups(matches) {

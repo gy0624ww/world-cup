@@ -1342,6 +1342,14 @@ body:not(.auth-loading) .auth-loading-screen {
   text-align: left;
 }
 
+.quick-stake-btn {
+  background:
+    linear-gradient(90deg, transparent 49%, rgba(255, 189, 89, .14) 50%, transparent 51%),
+    linear-gradient(0deg, transparent 49%, rgba(255, 189, 89, .1) 50%, transparent 51%),
+    radial-gradient(ellipse at center, transparent 0 40%, rgba(255, 189, 89, .12) 41%, transparent 42%),
+    linear-gradient(135deg, rgba(255, 189, 89, .1), rgba(255, 255, 255, .045));
+}
+
 .multiplier-btn.active {
   border-color: var(--gold);
   color: var(--gold);
@@ -1400,7 +1408,7 @@ body:not(.auth-loading) .auth-loading-screen {
 }
 
 .multiplier-btn.active .multiplier-watermark {
-  color: rgba(70, 223, 114, .22);
+  color: rgba(255, 189, 89, .22);
 }
 
 .multiplier-btn.used .multiplier-watermark {
@@ -1545,6 +1553,11 @@ body:not(.auth-loading) .auth-loading-screen {
   opacity: .78;
 }
 
+.bet-history-card.deducted,
+.bet-record.deducted {
+  border-left-color: var(--gold);
+}
+
 .history-date {
   display: grid;
   place-items: center;
@@ -1686,6 +1699,11 @@ body:not(.auth-loading) .auth-loading-screen {
 .history-status-cancelled {
   background: rgba(142, 160, 184, .4);
   color: #e5edf8;
+}
+
+.history-status-deducted {
+  background: rgba(255, 189, 89, .22);
+  color: var(--gold);
 }
 
 .history-list.compact {
@@ -1983,7 +2001,7 @@ body:not(.auth-loading) .auth-loading-screen {
 
 .config-user {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr .9fr .8fr .7fr .7fr auto;
+  grid-template-columns: 1fr 1fr 1fr 1fr .9fr .8fr auto;
   gap: .55rem;
   align-items: end;
   border: 1px solid rgba(255, 255, 255, .09);

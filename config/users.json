@@ -4,25 +4,17 @@
       "id": "admin",
       "username": "admin",
       "password": "gy860624",
-      "name": "总管理员",
+      "name": "关",
       "role": "admin",
-      "initialChips": 50000,
-      "cards": {
-        "2": 3,
-        "3": 2
-      }
+      "initialChips": 5000
     },
     {
       "id": "ops",
       "username": "superchao",
       "password": "zhaofanchao123456",
-      "name": "运营管理员",
-      "role": "admin",
-      "initialChips": 50000,
-      "cards": {
-        "2": 3,
-        "3": 2
-      }
+      "name": "赵",
+      "role": "player",
+      "initialChips": 4823
     },
     {
       "id": "player1",
@@ -30,35 +22,23 @@
       "password": "fanyong123456",
       "name": "范",
       "role": "player",
-      "initialChips": 50000,
-      "cards": {
-        "2": 3,
-        "3": 2
-      }
+      "initialChips": 5000
     },
     {
       "id": "player2",
       "username": "shishuo",
       "password": "shishuo123456",
-      "name": "玩家二",
+      "name": "石",
       "role": "player",
-      "initialChips": 50000,
-      "cards": {
-        "2": 3,
-        "3": 2
-      }
+      "initialChips": 5000
     },
     {
       "id": "player3",
       "username": "zhongshan",
       "password": "zhongshan123456",
-      "name": "玩家三",
+      "name": "钟",
       "role": "player",
-      "initialChips": 50000,
-      "cards": {
-        "2": 3,
-        "3": 2
-      }
+      "initialChips": 5000
     }
   ]
 }
