@@ -43,6 +43,15 @@ npm start
 
 部署后 Nginx 保留根路径原站点，并把 `/world-cup/` 反代到本地 Node 服务。
 
+本机修改上线统一执行：
+
+```bash
+npm run deploy:local
+```
+
+该命令会依次运行完整测试、重启 `world-cup.service`，并通过 `/api/health`
+确认服务已切换到新进程且走势图终点与排行榜筹码一致。不要只修改文件而不执行发布命令。
+
 ### Vercel 部署
 
 项目也支持部署到 Vercel，入口仍然是 `/world-cup/`。

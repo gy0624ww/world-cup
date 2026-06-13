@@ -1,4 +1,24 @@
 const BASE_PATH = document.querySelector('meta[name="base-path"]')?.content || "/world-cup";
+const ICONS = {
+  "panel-left-close": '<path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"/><path d="M16 15l-3-3 3-3"/><path d="M13 12h8"/>',
+  "calendar-days": '<path d="M8 2v4M16 2v4M3 10h18"/><rect width="18" height="18" x="3" y="4" rx="2"/>',
+  "bar-chart-3": '<path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/>',
+  trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4"/>',
+  "ticket-check": '<path d="M2 9a3 3 0 0 0 0 6v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4a3 3 0 0 0 0-6V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><path d="m9 12 2 2 4-4"/>',
+  "shield-check": '<path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3z"/><path d="m9 12 2 2 4-4"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.74l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  "log-out": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  "chevron-left": '<path d="m15 18-6-6 6-6"/>'
+};
+
+function renderIcons() {
+  document.querySelectorAll("[data-lucide]").forEach((node) => {
+    const paths = ICONS[node.dataset.lucide];
+    if (!paths) return;
+    node.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+  });
+}
+
 const els = {
   login: document.querySelector("#login-screen"),
   loading: document.querySelector("#auth-loading-screen"),
@@ -18,6 +38,7 @@ const els = {
   marketButtons: document.querySelector("#market-buttons"),
   multiplierButtons: document.querySelector("#multiplier-buttons"),
   stakeInput: document.querySelector("#stake-input"),
+  stakeLimit: document.querySelector("#stake-limit"),
   payoutEstimate: document.querySelector("#payout-estimate"),
   submitBet: document.querySelector("#submit-bet"),
   cancelEdit: document.querySelector("#cancel-edit"),
@@ -26,6 +47,17 @@ const els = {
   betDashboard: document.querySelector("#bet-dashboard"),
   betsViewList: document.querySelector("#bets-view-list"),
   leaderboard: document.querySelector("#leaderboard"),
+  dashboardSummary: document.querySelector("#dashboard-summary"),
+  dashboardChipPool: document.querySelector("#dashboard-chip-pool"),
+  dashboardSettledChart: document.querySelector("#dashboard-settled-chart"),
+  dashboardWinRateChart: document.querySelector("#dashboard-win-rate-chart"),
+  dashboardProfitChart: document.querySelector("#dashboard-profit-chart"),
+  dashboardWageredChart: document.querySelector("#dashboard-wagered-chart"),
+  dashboardChartLegend: document.querySelector("#dashboard-chart-legend"),
+  dashboardTimelineShell: document.querySelector("#dashboard-timeline-shell"),
+  dashboardTimelineCanvas: document.querySelector("#dashboard-timeline-canvas"),
+  dashboardChartTooltip: document.querySelector("#dashboard-chart-tooltip"),
+  dashboardDataTable: document.querySelector("#dashboard-data-table"),
   bracket: document.querySelector("#bracket-board"),
   adminForm: document.querySelector("#admin-form"),
   configForm: document.querySelector("#config-form"),
@@ -39,6 +71,13 @@ const appState = {
   knockout: [],
   bets: [],
   leaderboard: [],
+  dashboard: null,
+  dashboardHiddenUsers: new Set(),
+  dashboardChart: {
+    frame: null,
+    hoverIndex: null,
+    layout: null
+  },
   sourceCache: null,
   selectedMatchId: null,
   selectedPick: "home",
@@ -73,6 +112,29 @@ const betStatusLabels = {
   cancelled: "已取消",
   deducted: "已扣除"
 };
+
+const dashboardPalette = [
+  "#46df72",
+  "#74d6ff",
+  "#ffbd59",
+  "#c084fc",
+  "#fb7185",
+  "#2dd4bf",
+  "#f97316",
+  "#a3e635",
+  "#60a5fa",
+  "#f472b6",
+  "#facc15",
+  "#22d3ee",
+  "#818cf8",
+  "#34d399",
+  "#fda4af",
+  "#67e8f9",
+  "#bef264",
+  "#d8b4fe",
+  "#fdba74",
+  "#93c5fd"
+];
 
 const teamFlags = {
   "Algeria": "🇩🇿",
@@ -194,7 +256,21 @@ function escapeHtml(value) {
 }
 
 function formatNumber(value) {
-  return new Intl.NumberFormat("zh-CN").format(Math.round(Number(value || 0)));
+  return new Intl.NumberFormat("zh-CN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(Number(value || 0));
+}
+
+function formatCount(value) {
+  return new Intl.NumberFormat("zh-CN", {
+    maximumFractionDigits: 0
+  }).format(Number(value || 0));
+}
+
+function formatSignedNumber(value) {
+  const number = Number(value || 0);
+  return `${number > 0 ? "+" : ""}${formatNumber(number)}`;
 }
 
 function teamFlag(team) {
@@ -238,7 +314,9 @@ function renderFlagAvatar(team) {
 }
 
 function betForMatch(matchId) {
-  return appState.bets.find((bet) => bet.matchId === matchId && bet.status !== "cancelled") || null;
+  return appState.bets.find(
+    (bet) => bet.matchId === matchId && bet.type !== "auto-deduction" && bet.status !== "cancelled"
+  ) || null;
 }
 
 function animateNumber(el, from, to, suffix = "") {
@@ -247,7 +325,7 @@ function animateNumber(el, from, to, suffix = "") {
   const tick = (time) => {
     const progress = Math.min(1, (time - start) / duration);
     const eased = 1 - Math.pow(1 - progress, 3);
-    const current = Math.round(from + (to - from) * eased);
+    const current = from + (to - from) * eased;
     const value = `${formatNumber(current)}${suffix}`;
     el.textContent = value;
     el.dataset.glitch = value;
@@ -258,6 +336,17 @@ function animateNumber(el, from, to, suffix = "") {
 
 function formatOdds(value) {
   return Number(value || 0).toFixed(2);
+}
+
+function renderOddsWarning(match) {
+  if (!["default", "configured"].includes(match.oddsSource)) return "";
+  return `<span class="odds-warning" title="赔率未更新" aria-label="赔率未更新">!</span>`;
+}
+
+function renderBetOddsWarning(bet, match, inline = false) {
+  const oddsSource = bet.oddsSource || match.oddsSource;
+  if (!["default", "configured"].includes(oddsSource)) return "";
+  return `<span class="odds-warning${inline ? " odds-warning-inline" : ""}" title="赔率未更新" aria-label="赔率未更新">!</span>`;
 }
 
 function formatDate(iso) {
@@ -316,7 +405,7 @@ function winnerLabel(match) {
 function returnLabel(bet) {
   if (bet.type === "auto-deduction") return `-${formatNumber(bet.stake)}`;
   if (bet.status === "settled") return `+${formatNumber(bet.payout)}`;
-  if (bet.status === "lost") return "0";
+  if (bet.status === "lost") return formatNumber(0);
   if (bet.status === "cancelled") return "已取消";
   return "待结算";
 }
@@ -422,6 +511,7 @@ function applyBootstrap(data, { renderMode = "full" } = {}) {
   appState.knockout = data.knockout || [];
   appState.bets = data.bets || [];
   appState.leaderboard = data.leaderboard || [];
+  appState.dashboard = data.dashboard || dashboardFallback(appState.leaderboard);
   appState.sourceCache = data.sourceCache || null;
 
   const selectedStillExists = appState.matches.some((match) => match.id === appState.selectedMatchId);
@@ -442,6 +532,60 @@ function applyBootstrap(data, { renderMode = "full" } = {}) {
   }
 }
 
+function dashboardFallback(leaderboard) {
+  const players = (leaderboard || []).map((user) => ({
+    id: user.id,
+    name: user.name,
+    settledBets: 0,
+    wins: 0,
+    winRate: 0,
+    wagered: 0,
+    payout: 0,
+    netProfit: 0,
+    currentChips: Number(user.chips || 0),
+    realizedChips: Number(user.chips || 0),
+    initialChips: Number(user.chips || 0)
+  }));
+  const totalChips = players.reduce((sum, player) => sum + player.realizedChips, 0);
+  return {
+    summary: {
+      participantCount: players.length,
+      settledBetCount: 0,
+      settledStake: 0,
+      totalPayout: 0
+    },
+    chipPool: {
+      totalChips,
+      prizePool: 1000,
+      distribution: players.map((player) => {
+        const share = totalChips > 0 ? (player.realizedChips / totalChips) * 100 : 0;
+        return {
+          userId: player.id,
+          name: player.name,
+          chips: player.realizedChips,
+          share,
+          prize: (share / 100) * 1000
+        };
+      })
+    },
+    players,
+    timeline: {
+      points: [{
+        id: "initial",
+        matchId: null,
+        displayNo: null,
+        startAt: null,
+        label: "当前筹码"
+      }],
+      series: players.map((player) => ({
+        userId: player.id,
+        name: player.name,
+        values: [player.currentChips]
+      }))
+    }
+  };
+}
+
 function selectedMatch() {
   return appState.matches.find((match) => match.id === appState.selectedMatchId) || null;
 }
@@ -453,6 +597,11 @@ function selectedBet() {
 function setSlipCollapsed(collapsed) {
   els.betSlip.classList.toggle("collapsed", collapsed);
   els.app.classList.toggle("slip-collapsed", collapsed);
+  document.querySelectorAll('[data-action="toggle-slip"]').forEach((button) => {
+    button.setAttribute("aria-expanded", String(!collapsed));
+  });
+  const slipToggle = els.betSlip.querySelector(".slip-toggle");
+  slipToggle?.setAttribute("aria-label", collapsed ? "展开我的投注" : "收起我的投注");
 }
 
 function isAdmin() {
@@ -467,6 +616,7 @@ function render() {
   renderSlip();
   renderBets();
   renderLeaderboard();
+  renderDashboard();
   renderBracket();
   renderAdmin();
 }
@@ -477,6 +627,7 @@ function renderDataRegions() {
   renderMatches();
   renderBets();
   renderLeaderboard();
+  renderDashboard();
   renderBracket();
 }
 
@@ -526,12 +677,481 @@ function renderStats() {
     ["未开赛", upcoming],
     ["待处理注单", openBets]
   ]
-    .map(([label, value]) => `<div class="stat-card"><span>${label}</span><strong>${formatNumber(value)}</strong></div>`)
+    .map(([label, value]) => `<div class="stat-card"><span>${label}</span><strong>${formatCount(value)}</strong></div>`)
     .join("");
 }
 
+function renderDashboard() {
+  if (!els.dashboardSummary) return;
+  const dashboard = appState.dashboard || {
+    summary: {
+      participantCount: 0,
+      settledBetCount: 0,
+      settledStake: 0,
+      totalPayout: 0
+    },
+    players: [],
+    timeline: { points: [], series: [] }
+  };
+  const { summary, players, timeline } = dashboard;
+  const summaryCards = [
+    ["参与人数", summary.participantCount, "当前竞猜人员总数", formatCount],
+    ["已结算竞猜", summary.settledBetCount, "有效赢单与输单", formatCount],
+    ["已结算下注总额", summary.settledStake, "不含取消及未结算竞猜", formatNumber],
+    ["累计返还筹码", summary.totalPayout, "所有赢单返还筹码合计", formatNumber]
+  ];
+  els.dashboardSummary.innerHTML = summaryCards
+    .map(([label, value, note, formatter], index) => `
+      <article class="dashboard-summary-card ${index === 3 ? "featured" : ""}">
+        <span>${escapeHtml(label)}</span>
+        <strong>${formatter(value)}</strong>
+        <small>${escapeHtml(note)}</small>
+      </article>
+    `)
+    .join("");
+
+  renderDashboardComparison(els.dashboardSettledChart, players, {
+    metric: "settledBets",
+    format: (value) => `${formatCount(value)} 场`
+  });
+  renderDashboardComparison(els.dashboardWinRateChart, players, {
+    metric: "winRate",
+    format: (value) => `${Number(value || 0).toFixed(value % 1 ? 1 : 0)}%`
+  });
+  renderDashboardComparison(els.dashboardProfitChart, players, {
+    metric: "netProfit",
+    format: formatSignedNumber,
+    signed: true
+  });
+  renderDashboardComparison(els.dashboardWageredChart, players, {
+    metric: "wagered",
+    format: formatNumber
+  });
+  renderDashboardChipPool(dashboard.chipPool, players);
+
+  const activeIds = new Set((timeline.series || []).map((series) => series.userId));
+  for (const userId of appState.dashboardHiddenUsers) {
+    if (!activeIds.has(userId)) appState.dashboardHiddenUsers.delete(userId);
+  }
+  renderDashboardLegend();
+  renderDashboardDataTable();
+  queueDashboardChartDraw();
+}
+
+function renderDashboardChipPool(chipPool, players) {
+  if (!els.dashboardChipPool) return;
+  const totalChips = Number(chipPool?.totalChips ?? players.reduce(
+    (sum, player) => sum + Number(player.realizedChips || 0),
+    0
+  ));
+  const prizePool = Number(chipPool?.prizePool || 1000);
+  const distribution = chipPool?.distribution || players.map((player) => {
+    const share = totalChips > 0 ? (Number(player.realizedChips || 0) / totalChips) * 100 : 0;
+    return {
+      userId: player.id,
+      name: player.name,
+      chips: Number(player.realizedChips || 0),
+      share,
+      prize: (share / 100) * prizePool
+    };
+  });
+  const shareRanking = [...distribution].sort((a, b) => (
+    Number(b.share || 0) - Number(a.share || 0)
+    || String(a.name || "").localeCompare(String(b.name || ""), "zh-CN")
+  ));
+  const prizeRanking = [...distribution].sort((a, b) => (
+    Number(b.prize || 0) - Number(a.prize || 0)
+    || String(a.name || "").localeCompare(String(b.name || ""), "zh-CN")
+  ));
+
+  if (!shareRanking.length || totalChips <= 0) {
+    els.dashboardChipPool.innerHTML = `<div class="dashboard-empty">暂无可用于统计的筹码数据</div>`;
+    return;
+  }
+
+  let cursor = 0;
+  const slices = shareRanking.map((item, index) => {
+    const start = cursor;
+    cursor += (Number(item.chips || 0) / totalChips) * 100;
+    if (index === shareRanking.length - 1) cursor = 100;
+    return `${dashboardSeriesColor(index)} ${start}% ${cursor}%`;
+  });
+  const chartLabel = shareRanking
+    .map((item) => `${item.name} ${Number(item.share || 0).toFixed(2)}%`)
+    .join("，");
+
+  els.dashboardChipPool.innerHTML = `
+    <div class="chip-pool-visual">
+      <div
+        class="chip-pool-chart"
+        role="img"
+        aria-label="当前筹码占比：${escapeHtml(chartLabel)}"
+        style="--chip-pool-slices:${slices.join(",")}"
+      >
+        <div class="chip-pool-chart-center">
+          <span>当前总权益</span>
+          <strong>${formatNumber(totalChips)}</strong>
+          <small>100%</small>
+        </div>
+      </div>
+      <div class="chip-pool-legend">
+        ${shareRanking.map((item, index) => `
+          <div class="chip-pool-legend-item">
+            <i style="--player-color:${dashboardSeriesColor(index)}"></i>
+            <span title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+            <strong>${Number(item.share || 0).toFixed(2)}%</strong>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+    <div class="prize-allocation">
+      <div class="prize-allocation-title">
+        <div>
+          <span>奖金分配明细</span>
+          <small>当前总权益占比 × ¥${formatNumber(prizePool)}</small>
+        </div>
+        <strong>预计分得</strong>
+      </div>
+      <div class="prize-allocation-list">
+        ${prizeRanking.map((item, index) => `
+          <div class="prize-allocation-row" style="--player-color:${dashboardSeriesColor(index)}">
+            <div class="prize-player">
+              <span class="prize-player-index">${index + 1}</span>
+              <i></i>
+              <span>
+                <b>${escapeHtml(item.name)}</b>
+                <small>${formatNumber(item.chips)} 总权益 · ${Number(item.share || 0).toFixed(2)}%</small>
+              </span>
+            </div>
+            <strong>¥${formatNumber(item.prize)}</strong>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderDashboardComparison(container, players, { metric, format, signed = false }) {
+  if (!container) return;
+  const sorted = [...players].sort((a, b) => (
+    Number(b[metric] || 0) - Number(a[metric] || 0)
+    || String(a.name || "").localeCompare(String(b.name || ""), "zh-CN")
+  ));
+  if (!sorted.length) {
+    container.innerHTML = `<div class="dashboard-empty">暂无竞猜人员数据</div>`;
+    return;
+  }
+  const max = Math.max(...sorted.map((player) => Math.abs(Number(player[metric] || 0))), 0);
+  container.innerHTML = sorted.map((player, index) => {
+    const value = Number(player[metric] || 0);
+    const width = max ? Math.max(value === 0 ? 0 : 3, (Math.abs(value) / max) * 100) : 0;
+    const tone = signed ? (value > 0 ? "positive" : value < 0 ? "negative" : "neutral") : "positive";
+    return `
+      <div class="comparison-row ${tone}">
+        <div class="comparison-meta">
+          <span title="${escapeHtml(player.name)}"><b>${index + 1}</b>${escapeHtml(player.name)}</span>
+          <strong>${escapeHtml(format(value))}</strong>
+        </div>
+        <div class="comparison-track" role="img" aria-label="${escapeHtml(player.name)}：${escapeHtml(format(value))}">
+          <span class="comparison-fill" style="width:${Math.min(100, width)}%"></span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function dashboardSeriesColor(index) {
+  return dashboardPalette[index % dashboardPalette.length];
+}
+
+function renderDashboardLegend() {
+  if (!els.dashboardChartLegend) return;
+  const series = appState.dashboard?.timeline?.series || [];
+  els.dashboardChartLegend.innerHTML = series.map((item, index) => {
+    const visible = !appState.dashboardHiddenUsers.has(item.userId);
+    return `
+      <button
+        class="dashboard-legend-item ${visible ? "" : "muted"}"
+        data-action="toggle-dashboard-series"
+        data-user-id="${escapeHtml(item.userId)}"
+        type="button"
+        aria-pressed="${visible}"
+        style="--series-color:${dashboardSeriesColor(index)}"
+      >
+        <span></span>${escapeHtml(item.name)}
+      </button>
+    `;
+  }).join("");
+}
+
+function renderDashboardDataTable() {
+  if (!els.dashboardDataTable) return;
+  const timeline = appState.dashboard?.timeline;
+  const points = timeline?.points || [];
+  const series = timeline?.series || [];
+  if (!series.length) {
+    els.dashboardDataTable.innerHTML = `<div class="dashboard-empty">暂无筹码走势数据</div>`;
+    return;
+  }
+  els.dashboardDataTable.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">赛程时间</th>
+          <th scope="col">比赛</th>
+          ${series.map((item) => `<th scope="col">${escapeHtml(item.name)}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${points.map((point, pointIndex) => `
+          <tr>
+            <th scope="row">${point.startAt ? escapeHtml(formatFullDate(point.startAt)) : "初始"}</th>
+            <td>${point.matchId ? `#${escapeHtml(point.displayNo)} ${escapeHtml(point.label)}` : "初始筹码"}</td>
+            ${series.map((item) => `<td>${formatNumber(item.values[pointIndex])}</td>`).join("")}
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function formatDashboardPointLabel(point) {
+  if (!point?.startAt) return "初始";
+  const date = new Date(point.startAt);
+  const dateLabel = new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit"
+  }).format(date);
+  return `${dateLabel} #${point.displayNo}`;
+}
+
+function queueDashboardChartDraw() {
+  if (appState.dashboardChart.frame) cancelAnimationFrame(appState.dashboardChart.frame);
+  appState.dashboardChart.frame = requestAnimationFrame(() => {
+    appState.dashboardChart.frame = null;
+    drawDashboardTimeline();
+  });
+}
+
+function dashboardSeriesPointOffsets(series) {
+  const offsets = series.map((item) => item.values.map(() => 0));
+  const pointCount = Math.max(0, ...series.map((item) => item.values.length));
+  for (let pointIndex = 0; pointIndex < pointCount; pointIndex += 1) {
+    const groups = new Map();
+    series.forEach((item, seriesIndex) => {
+      const value = Number(item.values[pointIndex]);
+      if (!Number.isFinite(value)) return;
+      const key = String(value);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(seriesIndex);
+    });
+    for (const indexes of groups.values()) {
+      if (indexes.length < 2) continue;
+      const center = (indexes.length - 1) / 2;
+      indexes.forEach((seriesIndex, groupIndex) => {
+        offsets[seriesIndex][pointIndex] = (groupIndex - center) * 4;
+      });
+    }
+  }
+  return offsets;
+}
+
+function drawDashboardTimeline() {
+  const canvas = els.dashboardTimelineCanvas;
+  const timeline = appState.dashboard?.timeline;
+  if (!canvas || !timeline || appState.view !== "dashboard") return;
+  const scroll = canvas.parentElement;
+  const viewportWidth = scroll?.clientWidth || 0;
+  if (!viewportWidth) return;
+
+  const points = timeline.points || [];
+  const visibleSeries = (timeline.series || [])
+    .map((series, index) => ({ ...series, color: dashboardSeriesColor(index) }))
+    .filter((series) => !appState.dashboardHiddenUsers.has(series.userId));
+  const cssHeight = 420;
+  const cssWidth = Math.max(viewportWidth, 120 + Math.max(1, points.length - 1) * 88);
+  const ratio = Math.max(1, window.devicePixelRatio || 1);
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${cssHeight}px`;
+  canvas.width = Math.floor(cssWidth * ratio);
+  canvas.height = Math.floor(cssHeight * ratio);
+
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  if (!points.length || !visibleSeries.length) {
+    ctx.fillStyle = "#94a9c5";
+    ctx.font = "700 14px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(visibleSeries.length ? "暂无筹码走势数据" : "请从图例中选择至少一名竞猜人员", cssWidth / 2, cssHeight / 2);
+    appState.dashboardChart.layout = null;
+    return;
+  }
+
+  const margin = { top: 30, right: 28, bottom: 82, left: 74 };
+  const plotWidth = Math.max(1, cssWidth - margin.left - margin.right);
+  const plotHeight = cssHeight - margin.top - margin.bottom;
+  const allValues = visibleSeries.flatMap((series) => series.values.map(Number));
+  let minValue = Math.min(...allValues);
+  let maxValue = Math.max(...allValues);
+  if (minValue === maxValue) {
+    minValue -= Math.max(100, Math.abs(minValue) * .05);
+    maxValue += Math.max(100, Math.abs(maxValue) * .05);
+  } else {
+    const padding = (maxValue - minValue) * .12;
+    minValue -= padding;
+    maxValue += padding;
+  }
+  const xAt = (index) => (
+    points.length <= 1
+      ? margin.left
+      : margin.left + (index / (points.length - 1)) * plotWidth
+  );
+  const yAt = (value) => margin.top + ((maxValue - value) / (maxValue - minValue)) * plotHeight;
+  const pointOffsets = dashboardSeriesPointOffsets(visibleSeries);
+
+  ctx.lineWidth = 1;
+  ctx.font = "700 11px ui-monospace, monospace";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  for (let index = 0; index <= 5; index += 1) {
+    const y = margin.top + (index / 5) * plotHeight;
+    const value = maxValue - (index / 5) * (maxValue - minValue);
+    ctx.strokeStyle = "rgba(194, 214, 255, .12)";
+    ctx.beginPath();
+    ctx.moveTo(margin.left, y);
+    ctx.lineTo(cssWidth - margin.right, y);
+    ctx.stroke();
+    ctx.fillStyle = "#8296b2";
+    ctx.fillText(formatNumber(value), margin.left - 10, y);
+  }
+
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  points.forEach((point, index) => {
+    const x = xAt(index);
+    ctx.save();
+    ctx.translate(x, cssHeight - margin.bottom + 16);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillStyle = "#8296b2";
+    ctx.fillText(formatDashboardPointLabel(point), 0, 0);
+    ctx.restore();
+  });
+
+  const hoverIndex = appState.dashboardChart.hoverIndex;
+  if (Number.isInteger(hoverIndex) && points[hoverIndex]) {
+    const x = xAt(hoverIndex);
+    ctx.strokeStyle = "rgba(255, 255, 255, .32)";
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, margin.top);
+    ctx.lineTo(x, margin.top + plotHeight);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  visibleSeries.forEach((series, seriesIndex) => {
+    ctx.strokeStyle = series.color;
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    series.values.forEach((value, index) => {
+      const x = xAt(index);
+      const y = yAt(Number(value)) + pointOffsets[seriesIndex][index];
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    series.values.forEach((value, index) => {
+      if (index !== 0 && index !== series.values.length - 1 && index !== hoverIndex) return;
+      ctx.fillStyle = "#071626";
+      ctx.strokeStyle = series.color;
+      ctx.lineWidth = index === hoverIndex ? 3 : 2;
+      ctx.beginPath();
+      ctx.arc(
+        xAt(index),
+        yAt(Number(value)) + pointOffsets[seriesIndex][index],
+        index === hoverIndex ? 5 : 3.5,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      ctx.stroke();
+    });
+  });
+
+  appState.dashboardChart.layout = {
+    left: margin.left,
+    plotWidth,
+    pointCount: points.length
+  };
+}
+
+function showDashboardChartTooltip(event, pointIndex) {
+  const tooltip = els.dashboardChartTooltip;
+  const shell = els.dashboardTimelineShell;
+  const timeline = appState.dashboard?.timeline;
+  const point = timeline?.points?.[pointIndex];
+  if (!tooltip || !shell || !point) return;
+  const visibleSeries = (timeline.series || [])
+    .map((series, index) => ({ ...series, color: dashboardSeriesColor(index) }))
+    .filter((series) => !appState.dashboardHiddenUsers.has(series.userId));
+  tooltip.innerHTML = `
+    <strong>${point.startAt ? escapeHtml(formatFullDate(point.startAt)) : "初始筹码"}</strong>
+    <span>${point.matchId ? `#${escapeHtml(point.displayNo)} ${escapeHtml(point.label)}` : "所有人员的初始筹码"}</span>
+    ${visibleSeries.map((series) => `
+      <div>
+        <i style="background:${series.color}"></i>
+        <span>${escapeHtml(series.name)}</span>
+        <b>${formatNumber(series.values[pointIndex])}</b>
+      </div>
+    `).join("")}
+  `;
+  tooltip.classList.remove("hidden");
+  const shellRect = shell.getBoundingClientRect();
+  const left = event.clientX - shellRect.left + 14;
+  const top = event.clientY - shellRect.top + 14;
+  tooltip.style.left = `${Math.max(8, Math.min(left, shell.clientWidth - 230))}px`;
+  tooltip.style.top = `${Math.max(8, Math.min(top, shell.clientHeight - 80))}px`;
+}
+
+function handleDashboardChartPointer(event) {
+  const layout = appState.dashboardChart.layout;
+  const canvas = els.dashboardTimelineCanvas;
+  if (!layout || !canvas || layout.pointCount < 1) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const relative = Math.max(0, Math.min(layout.plotWidth, x - layout.left));
+  const pointIndex = layout.pointCount === 1
+    ? 0
+    : Math.round((relative / layout.plotWidth) * (layout.pointCount - 1));
+  if (pointIndex !== appState.dashboardChart.hoverIndex) {
+    appState.dashboardChart.hoverIndex = pointIndex;
+    queueDashboardChartDraw();
+  }
+  showDashboardChartTooltip(event, pointIndex);
+}
+
+function clearDashboardChartPointer() {
+  appState.dashboardChart.hoverIndex = null;
+  els.dashboardChartTooltip?.classList.add("hidden");
+  queueDashboardChartDraw();
+}
+
 function renderMatches() {
-  const visible = appState.matches.filter((match) => appState.filter === "all" || match.status === appState.filter);
+  const visible = appState.matches
+    .filter((match) => appState.filter === "all" || match.status === appState.filter)
+    .sort((left, right) => {
+      if (appState.filter !== "all") return 0;
+      if (left.locked !== right.locked) return left.locked ? 1 : -1;
+
+      const leftStart = new Date(left.startAt).getTime();
+      const rightStart = new Date(right.startAt).getTime();
+      return left.locked ? rightStart - leftStart : leftStart - rightStart;
+    });
   if (!visible.length) {
     els.matches.innerHTML = `<div class="empty-state">当前筛选下没有比赛</div>`;
     return;
@@ -544,11 +1164,12 @@ function renderMatchCard(match) {
   const statusClass = `status-${match.status}`;
   const groupLine = match.group ? `${match.group} · ${match.ground}` : `${match.round} · ${match.ground}`;
   const existingBet = betForMatch(match.id);
+  const betBadge = existingBet ? `已下注 · ${marketLabels[existingBet.pick] || "未知"}` : null;
   return `
     <article class="match-card ${isSelected ? "selected" : ""} ${match.locked ? "locked" : ""} ${existingBet ? "already-bet" : ""}">
       <div class="match-top">
         <span>${escapeHtml(groupLine)}</span>
-        <span class="status-badge ${existingBet ? "status-bet" : statusClass}">${existingBet ? "已下注" : statusLabels[match.status] || match.status}</span>
+        <span class="status-badge ${existingBet ? "status-bet" : statusClass}">${escapeHtml(betBadge || statusLabels[match.status] || match.status)}</span>
       </div>
       <div class="teams-row">
         <div class="team">
@@ -574,11 +1195,13 @@ function renderMatchCard(match) {
 }
 
 function renderOddButton(match, pick) {
-  const active = appState.selectedMatchId === match.id && appState.selectedPick === pick;
   const existingBet = betForMatch(match.id);
+  const active = !existingBet && appState.selectedMatchId === match.id && appState.selectedPick === pick;
+  const isBetPick = existingBet?.pick === pick;
   return `
-    <button class="odd-button ${active ? "active" : ""}" data-action="select-market" data-match-id="${match.id}" data-pick="${pick}" type="button" ${existingBet ? "disabled" : ""}>
-      <small>${marketLabels[pick]}</small>
+    <button class="odd-button ${active ? "active" : ""} ${isBetPick ? "bet-picked" : ""}" data-action="select-market" data-match-id="${match.id}" data-pick="${pick}" type="button" ${existingBet ? "disabled" : ""}>
+      ${renderOddsWarning(match)}
+      <small>${marketLabels[pick]}${isBetPick ? " · 已选" : ""}</small>
       ${formatOdds(match.odds[pick])}
     </button>
   `;
@@ -597,6 +1220,7 @@ function renderSlip() {
   }
   const existingBet = betForMatch(match.id);
   const duplicateBlocked = existingBet && !appState.editingBetId;
+  const oddsUnavailable = ["default", "configured"].includes(match.oddsSource);
 
   els.selectedMatch.className = "selected-match";
   els.selectedMatch.innerHTML = `
@@ -611,18 +1235,34 @@ function renderSlip() {
   els.marketButtons.innerHTML = ["home", "draw", "away"]
     .map((pick) => renderSlipMarketButton(match, pick))
     .join("");
-  els.multiplierButtons.innerHTML = [1, 25, 50].map((value) => renderQuickStakeButton(value)).join("");
+  const maxStake = getBetMaxStake(match);
+  const quickStakes = maxStake === 150 ? [1, 25, 50, 100, 150] : maxStake === 100 ? [1, 25, 50, 100] : [1, 25, 50];
+  if (Number(appState.stake) > maxStake) appState.stake = maxStake;
+  els.multiplierButtons.innerHTML = quickStakes.map((value) => renderQuickStakeButton(value)).join("");
+  els.stakeInput.max = String(maxStake);
+  els.stakeLimit.textContent = `本场最高 ${maxStake} 筹码`;
   els.stakeInput.value = appState.stake;
   els.cancelEdit.classList.toggle("hidden", !appState.editingBetId);
   els.submitBet.textContent = appState.editingBetId ? "保存修改" : duplicateBlocked ? "已下注" : "确认下注";
-  els.submitBet.disabled = match.locked || match.status === "finished" || duplicateBlocked;
-  els.betError.textContent = duplicateBlocked ? "每个场次只能下注一次，可在最近记录中修改未开赛注单。" : "";
+  els.submitBet.disabled = match.locked || match.status === "finished" || duplicateBlocked || oddsUnavailable;
+  els.betError.textContent = oddsUnavailable
+    ? "未拉取真实赔率，请联系管理员"
+    : duplicateBlocked
+      ? "每个场次只能下注一次，可在最近记录中修改未开赛注单。"
+      : "";
   updateEstimate();
+}
+
+function getBetMaxStake(match) {
+  if (["Final", "Match for third place"].includes(match?.round)) return 150;
+  if (!match?.group) return 100;
+  return 50;
 }
 
 function renderSlipMarketButton(match, pick) {
   return `
     <button class="odd-button ${appState.selectedPick === pick ? "active" : ""}" data-action="select-slip-pick" data-pick="${pick}" type="button">
+      ${renderOddsWarning(match)}
       <small>${marketLabels[pick]}</small>
       ${formatOdds(match.odds[pick])}
     </button>
@@ -643,7 +1283,7 @@ function renderQuickStakeButton(value) {
 function updateEstimate() {
   const match = selectedMatch();
   if (!match) {
-    els.payoutEstimate.textContent = "0";
+    els.payoutEstimate.textContent = formatNumber(0);
     return;
   }
   appState.stake = Number(els.stakeInput.value || appState.stake || 0);
@@ -691,7 +1331,7 @@ function renderBetDashboard() {
     </article>
     <article class="bet-metric">
       <span>BIGGEST WIN</span>
-      <strong>${summary.biggestWin ? formatNumber(summary.biggestWin.payout) : "0"}</strong>
+      <strong>${summary.biggestWin ? formatNumber(summary.biggestWin.payout) : formatNumber(0)}</strong>
       <small>${escapeHtml(biggestMatchLabel)}</small>
     </article>
   `;
@@ -700,7 +1340,7 @@ function renderBetDashboard() {
 function renderBetHistoryCard(bet) {
   if (bet.type === "auto-deduction") return renderAutoDeductionHistoryCard(bet);
   const match = bet.match || appState.matches.find((item) => item.id === bet.matchId) || {};
-  const parts = formatBetDateParts(bet.createdAt || match.startAt || new Date().toISOString());
+  const parts = formatBetDateParts(match.startAt || bet.createdAt || new Date().toISOString());
   const canEdit = bet.status === "open" && !match.locked;
   const pickedTeam = selectionLabel(bet, match);
   const statusClass = `history-status-${bet.status}`;
@@ -726,9 +1366,9 @@ function renderBetHistoryCard(bet) {
         <span>押注</span>
         <strong>${escapeHtml(pickedTeam || marketLabels[bet.pick] || "未知")}</strong>
       </div>
-      <div class="history-detail">
+      <div class="history-detail history-odds">
         <span>赔率</span>
-        <strong>${formatOdds(bet.odds)}</strong>
+        <strong>${formatOdds(bet.odds)}${renderBetOddsWarning(bet, match, true)}</strong>
       </div>
       <div class="history-detail">
         <span>筹码</span>
@@ -753,7 +1393,7 @@ function renderBetRecord(bet) {
   if (bet.type === "auto-deduction") return renderAutoDeductionRecord(bet);
   const match = bet.match || appState.matches.find((item) => item.id === bet.matchId) || {};
   const canEdit = bet.status === "open" && !match.locked;
-  const payout = bet.status === "settled" ? `+${formatNumber(bet.payout)}` : bet.status === "lost" ? "-0" : "待结算";
+  const payout = bet.status === "settled" ? `+${formatNumber(bet.payout)}` : bet.status === "lost" ? formatNumber(0) : "待结算";
   return `
     <article class="bet-record ${bet.status}">
       <div class="record-top">
@@ -761,7 +1401,7 @@ function renderBetRecord(bet) {
         <strong>${escapeHtml(payout)}</strong>
       </div>
       <div class="record-meta">
-        ${marketLabels[bet.pick]} · ${formatNumber(bet.stake)} 筹码 · ${formatOdds(bet.odds)} · ${betStatusLabels[bet.status]}
+        ${marketLabels[bet.pick]} · ${formatNumber(bet.stake)} 筹码 · ${formatOdds(bet.odds)}${renderBetOddsWarning(bet, match, true)} · ${betStatusLabels[bet.status]}
       </div>
       ${canEdit ? `
         <div class="record-actions">
@@ -775,7 +1415,7 @@ function renderBetRecord(bet) {
 
 function renderAutoDeductionHistoryCard(bet) {
   const match = bet.match || appState.matches.find((item) => item.id === bet.matchId) || {};
-  const parts = formatBetDateParts(bet.createdAt || match.startAt || new Date().toISOString());
+  const parts = formatBetDateParts(match.startAt || bet.createdAt || new Date().toISOString());
   return `
     <article class="bet-history-card deducted">
       <div class="history-date">
@@ -792,7 +1432,7 @@ function renderAutoDeductionHistoryCard(bet) {
           <b>vs</b>
           <span class="history-team">${renderFlagAvatar(match.team2)}${renderTeamText(match.team2 || "待定")}</span>
         </div>
-        <div class="history-winner">${escapeHtml(bet.reason || "比赛开始未下注，自动扣除 25 筹码")}</div>
+        <div class="history-winner">${escapeHtml(bet.reason || "比赛开始未下注，自动扣除 50 筹码")}</div>
       </div>
       <div class="history-detail">
         <span>扣除</span>
@@ -818,7 +1458,7 @@ function renderAutoDeductionRecord(bet) {
         <strong>-${formatNumber(bet.stake)}</strong>
       </div>
       <div class="record-meta">
-        ${escapeHtml(bet.reason || "比赛开始未下注，自动扣除 25 筹码")} · ${betStatusLabels[bet.status] || "已扣除"}
+        ${escapeHtml(bet.reason || "比赛开始未下注，自动扣除 50 筹码")} · ${betStatusLabels[bet.status] || "已扣除"}
       </div>
     </article>
   `;
@@ -995,6 +1635,7 @@ function renderConfig() {
         </label>
       </div>
       <p class="record-meta">默认赔率会用于未单独配置赔率的比赛；已经手动改过赔率的比赛仍以“结果管理”为准。</p>
+      <button class="btn btn-primary wide" type="submit">保存赛事配置</button>
     </div>
     <div class="config-card wide">
       <div class="record-top">
@@ -1005,16 +1646,16 @@ function renderConfig() {
         ${users.map(renderConfigUser).join("")}
       </div>
     </div>
-    <button class="btn btn-primary wide" type="submit">保存系统配置</button>
   `;
 }
 
 function renderConfigUser(user, index) {
+  const isNew = Boolean(user.isNew);
   return `
-    <div class="config-user" data-config-user="${index}">
+    <div class="config-user" data-config-user="${index}" data-original-id="${escapeHtml(user.id)}" data-is-new="${isNew ? "true" : "false"}">
       <label class="form-control">
         <span class="label-text">用户ID</span>
-        <input data-field="id" class="input input-bordered" value="${escapeHtml(user.id)}">
+        <input data-field="id" class="input input-bordered" value="${escapeHtml(user.id)}" ${isNew ? "" : "disabled"}>
       </label>
       <label class="form-control">
         <span class="label-text">账号</span>
@@ -1036,24 +1677,34 @@ function renderConfigUser(user, index) {
         </select>
       </label>
       <label class="form-control">
-        <span class="label-text">筹码</span>
+        <span class="label-text">初始筹码</span>
         <input data-field="initialChips" class="input input-bordered" type="number" min="0" value="${escapeHtml(user.initialChips)}">
       </label>
+      <button class="btn btn-primary btn-sm" data-action="save-config-user" data-index="${index}" type="button">保存账号</button>
       <button class="btn btn-ghost btn-sm" data-action="remove-config-user" data-index="${index}" type="button">删除</button>
     </div>
   `;
 }
 
-function readConfigForm() {
-  const form = new FormData(els.configForm);
-  const users = [...els.configForm.querySelectorAll("[data-config-user]")].map((row) => ({
+function readConfigUser(row) {
+  return {
     id: row.querySelector('[data-field="id"]').value,
     username: row.querySelector('[data-field="username"]').value,
     password: row.querySelector('[data-field="password"]').value,
     name: row.querySelector('[data-field="name"]').value,
     role: row.querySelector('[data-field="role"]').value,
     initialChips: Number(row.querySelector('[data-field="initialChips"]').value)
-  }));
+  };
+}
+
+function persistedConfigUsers() {
+  return (appState.adminConfig?.users || [])
+    .filter((user) => !user.isNew)
+    .map(({ isNew, ...user }) => user);
+}
+
+function readConfigForm() {
+  const form = new FormData(els.configForm);
   return {
     tournament: {
       sourceUrl: form.get("sourceUrl"),
@@ -1064,7 +1715,7 @@ function readConfigForm() {
         away: Number(form.get("defaultOddsAway"))
       }
     },
-    users
+    users: persistedConfigUsers()
   };
 }
 
@@ -1092,13 +1743,18 @@ async function submitBet(event) {
   const match = selectedMatch();
   if (!match) return;
   els.betError.textContent = "";
+  if (["default", "configured"].includes(match.oddsSource)) {
+    els.betError.textContent = "未拉取真实赔率，请联系管理员";
+    return;
+  }
   if (betForMatch(match.id) && !appState.editingBetId) {
     els.betError.textContent = "每个场次只能下注一次，可在最近记录中修改未开赛注单。";
     return;
   }
   const stake = Number(els.stakeInput.value);
-  if (!Number.isInteger(stake) || stake < 1 || stake > 50) {
-    els.betError.textContent = "投注金额必须为 1-50 的整数";
+  const maxStake = getBetMaxStake(match);
+  if (!Number.isInteger(stake) || stake < 1 || stake > maxStake) {
+    els.betError.textContent = `投注金额必须为 1-${maxStake} 的整数`;
     return;
   }
   try {
@@ -1155,10 +1811,40 @@ async function submitConfig(event) {
     appState.adminConfig = response.config;
     applyBootstrap(response.bootstrap, { renderMode: "data" });
     renderConfig();
-    toast("系统配置已保存");
+    toast("赛事配置已保存");
   } catch (error) {
     toast(error.message, "error");
   }
+}
+
+async function saveConfigUser(index) {
+  const row = els.configForm.querySelector(`[data-config-user="${index}"]`);
+  if (!row) return;
+  const user = readConfigUser(row);
+  const targetId = row.dataset.isNew === "true" ? user.id : row.dataset.originalId;
+  const response = await api(`/api/admin/users/${encodeURIComponent(targetId)}`, {
+    method: "PUT",
+    body: { user }
+  });
+  appState.adminConfig = response.config;
+  applyBootstrap(response.bootstrap, { renderMode: "data" });
+  renderConfig();
+  toast("账号已保存");
+}
+
+async function removeConfigUser(index) {
+  const row = els.configForm.querySelector(`[data-config-user="${index}"]`);
+  if (!row || !appState.adminConfig) return;
+  if (row.dataset.isNew === "true") {
+    appState.adminConfig.users.splice(index, 1);
+    renderConfig();
+    return;
+  }
+  const response = await api(`/api/admin/users/${encodeURIComponent(row.dataset.originalId)}`, { method: "DELETE" });
+  appState.adminConfig = response.config;
+  applyBootstrap(response.bootstrap, { renderMode: "data" });
+  renderConfig();
+  toast("账号已删除");
 }
 
 function startPolling() {
@@ -1187,6 +1873,10 @@ function bindEvents() {
   els.adminForm.addEventListener("submit", submitAdmin);
   els.configForm.addEventListener("submit", submitConfig);
   els.stakeInput.addEventListener("input", updateEstimate);
+  els.dashboardTimelineCanvas?.addEventListener("pointermove", handleDashboardChartPointer);
+  els.dashboardTimelineCanvas?.addEventListener("pointerleave", clearDashboardChartPointer);
+  els.dashboardTimelineCanvas?.parentElement?.addEventListener("scroll", clearDashboardChartPointer, { passive: true });
+  window.addEventListener("resize", queueDashboardChartDraw, { passive: true });
   els.adminForm.addEventListener("change", (event) => {
     if (event.target.id === "admin-match-select") {
       appState.adminMatchId = event.target.value;
@@ -1224,6 +1914,16 @@ function bindEvents() {
     }
     if (action === "toggle-slip") {
       setSlipCollapsed(!els.betSlip.classList.contains("collapsed"));
+    }
+    if (action === "toggle-dashboard-series") {
+      const userId = actionButton.dataset.userId;
+      if (appState.dashboardHiddenUsers.has(userId)) {
+        appState.dashboardHiddenUsers.delete(userId);
+      } else {
+        appState.dashboardHiddenUsers.add(userId);
+      }
+      renderDashboardLegend();
+      clearDashboardChartPointer();
     }
     if (action === "select-market") {
       appState.selectedMatchId = actionButton.dataset.matchId;
@@ -1288,15 +1988,24 @@ function bindEvents() {
         password: `player${nextIndex}2026`,
         name: `玩家${nextIndex}`,
         role: "player",
-        initialChips: 5000
+        initialChips: 5000,
+        isNew: true
       });
       renderConfig();
     }
+    if (action === "save-config-user") {
+      try {
+        await saveConfigUser(Number(actionButton.dataset.index));
+      } catch (error) {
+        toast(error.message, "error");
+      }
+    }
     if (action === "remove-config-user") {
-      if (!appState.adminConfig) return;
-      const index = Number(actionButton.dataset.index);
-      appState.adminConfig.users.splice(index, 1);
-      renderConfig();
+      try {
+        await removeConfigUser(Number(actionButton.dataset.index));
+      } catch (error) {
+        toast(error.message, "error");
+      }
     }
     if (action === "logout") {
       await api("/api/logout", { method: "POST" }).catch(() => {});
@@ -1306,6 +2015,7 @@ function bindEvents() {
   });
 }
 
+renderIcons();
 bindEvents();
 bootstrap({ silent: true }).then(() => {
   if (appState.user) startPolling();

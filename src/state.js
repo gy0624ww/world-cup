@@ -7,6 +7,7 @@ import {
   applyAutoDeductions,
   normalizeMatches,
   normalizeOpenBetMultipliers,
+  roundAmount,
   settleFinishedMatches,
   slug
 } from "./core.js";
@@ -25,7 +26,7 @@ const hasRestStorage = Boolean(kvUrl && kvToken);
 const hasRedisStorage = Boolean(redisUrl);
 const useMemoryStorage = Boolean(process.env.VERCEL) && !hasRestStorage && !hasRedisStorage;
 const ODDS_PROVIDER_SOURCE = "the-odds-api";
-const BETTING_RULE_VERSION = 2;
+const BETTING_RULE_VERSION = 4;
 const ODDS_ALIAS = new Map([
   ["usa", "united-states"],
   ["u-s-a", "united-states"],
@@ -238,6 +239,7 @@ export async function loadConfig() {
 export function initialState() {
   return {
     version: 1,
+    bettingRuleVersion: BETTING_RULE_VERSION,
     sourceCache: {
       name: "World Cup 2026",
       sourceUrl: "",
@@ -307,15 +309,39 @@ export function seedUsers(state, config) {
 }
 
 export function migrateBettingRules(state, config) {
-  if (Number(state.bettingRuleVersion || 1) >= BETTING_RULE_VERSION) return false;
-  const configuredUsers = new Map(config.users.map((user) => [user.id, user]));
-  for (const user of Object.values(state.users)) {
-    const configured = configuredUsers.get(user.id);
-    if (configured) {
-      user.chips = Number(configured.initialChips || 0);
+  const currentVersion = Number(state.bettingRuleVersion || 1);
+  if (currentVersion >= BETTING_RULE_VERSION) return false;
+
+  if (currentVersion < 2) {
+    const configuredUsers = new Map(config.users.map((user) => [user.id, user]));
+    for (const user of Object.values(state.users)) {
+      const configured = configuredUsers.get(user.id);
+      if (configured) {
+        user.chips = Number(configured.initialChips || 0);
+      }
+      delete user.cards;
     }
-    delete user.cards;
   }
+
+  if (currentVersion < 3) {
+    for (const bet of state.bets || []) {
+      if (bet.type === "auto-deduction" || bet.status !== "settled") continue;
+      const correctedPayout = roundAmount(Number(bet.stake || 0) * Number(bet.odds || 0));
+      const payoutDifference = roundAmount(correctedPayout - Number(bet.payout || 0));
+      bet.payout = correctedPayout;
+      const user = state.users[bet.userId];
+      if (user && payoutDifference !== 0) {
+        user.chips = roundAmount(Number(user.chips || 0) + payoutDifference);
+      }
+    }
+  }
+
+  if (currentVersion >= 2 && currentVersion < 4) {
+    for (const user of Object.values(state.users)) {
+      user.chips = roundAmount(Number(user.chips || 0) + 1000);
+    }
+  }
+
   normalizeOpenBetMultipliers(state);
   state.bettingRuleVersion = BETTING_RULE_VERSION;
   return true;
@@ -334,12 +360,13 @@ export function reconcileUsers(state, users) {
     }
   }
   for (const user of users) {
+    const existing = state.users[user.id];
     state.users[user.id] = {
       id: user.id,
       username: user.username,
       name: user.name,
       role: user.role || "player",
-      chips: Number(user.initialChips || 0)
+      chips: existing ? Number(existing.chips || 0) : Number(user.initialChips || 0)
     };
   }
 }

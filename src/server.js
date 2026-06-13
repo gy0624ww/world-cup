@@ -3,10 +3,13 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import {
   applyAutoDeductions,
+  buildDashboard,
   buildGroups,
   buildKnockout,
+  buildLeaderboard,
   cancelBet,
   createBet,
   decoratedMatches,
@@ -38,6 +41,20 @@ const MIME_TYPES = {
   ".ico": "image/x-icon"
 };
 
+const NO_CACHE_HEADERS = {
+  "cache-control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  pragma: "no-cache",
+  expires: "0"
+};
+const STATIC_CACHE_HEADERS = {
+  "cache-control": "public, max-age=86400, stale-while-revalidate=604800"
+};
+const VERSIONED_STATIC_CACHE_HEADERS = {
+  "cache-control": "public, max-age=31536000, immutable"
+};
+const COMPRESSIBLE_TYPES = new Set([".html", ".css", ".js", ".json", ".svg"]);
+
+const PROCESS_STARTED_AT = new Date().toISOString();
 let config = await loadConfig();
 const BASE_PATH = process.env.BASE_PATH || config.basePath || "/world-cup";
 const PORT = Number(process.env.PORT || config.port || 3008);
@@ -65,35 +82,43 @@ function sanitizeId(value) {
   return id;
 }
 
-function sanitizeConfigPayload(body) {
-  const users = Array.isArray(body.users) ? body.users : [];
+function sanitizeConfigUser(user) {
+  const id = sanitizeId(user.id);
+  const username = sanitizeText(user.username, "账号");
+  const role = user.role === "admin" ? "admin" : "player";
+  return {
+    id,
+    username,
+    password: sanitizeText(user.password, "密码"),
+    name: sanitizeText(user.name, "显示名"),
+    role,
+    initialChips: Math.max(0, Math.trunc(Number(user.initialChips || 0)))
+  };
+}
+
+function sanitizeConfigUsers(users) {
   if (users.length < 1 || users.length > 20) {
     throw Object.assign(new Error("用户数量需要在 1 到 20 个之间"), { statusCode: 400 });
   }
   const seenIds = new Set();
   const seenNames = new Set();
   const cleanUsers = users.map((user) => {
-    const id = sanitizeId(user.id);
-    const username = sanitizeText(user.username, "账号");
-    if (seenIds.has(id) || seenNames.has(username)) {
+    const cleanUser = sanitizeConfigUser(user);
+    if (seenIds.has(cleanUser.id) || seenNames.has(cleanUser.username)) {
       throw Object.assign(new Error("用户ID和账号不能重复"), { statusCode: 400 });
     }
-    seenIds.add(id);
-    seenNames.add(username);
-    const role = user.role === "admin" ? "admin" : "player";
-    return {
-      id,
-      username,
-      password: sanitizeText(user.password, "密码"),
-      name: sanitizeText(user.name, "显示名"),
-      role,
-      initialChips: Math.max(0, Math.trunc(Number(user.initialChips || 0)))
-    };
+    seenIds.add(cleanUser.id);
+    seenNames.add(cleanUser.username);
+    return cleanUser;
   });
   if (!cleanUsers.some((user) => user.role === "admin")) {
     throw Object.assign(new Error("至少需要保留一个管理员"), { statusCode: 400 });
   }
+  return cleanUsers;
+}
 
+function sanitizeConfigPayload(body) {
+  const users = sanitizeConfigUsers(Array.isArray(body.users) ? body.users : []);
   const tournament = body.tournament || {};
   const sourceUrl = sanitizeText(tournament.sourceUrl || config.sourceUrl, "赛程源URL");
   if (!/^https?:\/\//.test(sourceUrl)) {
@@ -134,6 +159,17 @@ function publicConfig() {
   };
 }
 
+async function persistUsersConfig(users) {
+  await writeJson(paths.usersConfig, { users });
+  config = {
+    ...config,
+    users
+  };
+  reconcileUsers(state, users);
+  applyAutoDeductions(state, config);
+  return publicConfig();
+}
+
 function queueMutation(fn) {
   const run = writeQueue.catch(() => {}).then(async () => {
     const result = await fn();
@@ -146,12 +182,17 @@ function queueMutation(fn) {
 }
 
 function sendJson(res, status, payload, headers = {}) {
+  const rawBody = Buffer.from(JSON.stringify(payload));
+  const acceptsGzip = /\bgzip\b/.test(res.req?.headers["accept-encoding"] || "");
+  const body = acceptsGzip && rawBody.length >= 1024 ? gzipSync(rawBody) : rawBody;
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
+    "content-length": body.length,
+    ...(body !== rawBody ? { "content-encoding": "gzip", vary: "Accept-Encoding" } : {}),
+    ...NO_CACHE_HEADERS,
     ...headers
   });
-  res.end(JSON.stringify(payload));
+  res.end(body);
 }
 
 function redirect(res, location) {
@@ -239,7 +280,7 @@ function buildBootstrap(user) {
   settleFinishedMatches(state, config, now);
   const matches = decoratedMatches(state, config, now);
   const userBets = state.bets
-    .filter((bet) => bet.userId === user.id && bet.status !== "cancelled")
+    .filter((bet) => bet.userId === user.id)
     .map((bet) => {
       const match = matches.find((item) => item.id === bet.matchId);
       return {
@@ -262,9 +303,20 @@ function buildBootstrap(user) {
     groups: buildGroups(matches),
     knockout: buildKnockout(matches),
     bets: userBets,
-    leaderboard: Object.values(state.users)
-      .map(publicUser)
-      .sort((a, b) => b.chips - a.chips)
+    dashboard: buildDashboard(state, config),
+    leaderboard: buildLeaderboard(state)
+  };
+}
+
+function runtimeConsistency() {
+  const leaderboard = new Map(buildLeaderboard(state).map((user) => [user.id, user.chips]));
+  const dashboard = buildDashboard(state, config);
+  const mismatches = dashboard.timeline.series
+    .filter((series) => series.values.at(-1) !== leaderboard.get(series.userId))
+    .map((series) => series.userId);
+  return {
+    ok: mismatches.length === 0,
+    mismatches
   };
 }
 
@@ -313,7 +365,14 @@ async function handleApi(req, res, pathname) {
   }
 
   if (req.method === "GET" && pathname === "/api/health") {
-    sendJson(res, 200, { ok: true, matches: state.sourceCache.matches.length });
+    const consistency = runtimeConsistency();
+    sendJson(res, consistency.ok ? 200 : 503, {
+      ok: consistency.ok,
+      pid: process.pid,
+      startedAt: PROCESS_STARTED_AT,
+      matches: state.sourceCache.matches.length,
+      consistency
+    });
     return;
   }
 
@@ -416,15 +475,53 @@ async function handleApi(req, res, pathname) {
         defaultOdds: next.tournament.defaultOdds
       };
       delete nextTournamentConfig.users;
-      await writeJson(paths.usersConfig, { users: next.users });
       await writeJson(paths.tournamentConfig, nextTournamentConfig);
       config = {
         ...nextTournamentConfig,
         users: next.users
       };
-      reconcileUsers(state, next.users);
-      applyAutoDeductions(state, config);
-      return publicConfig();
+      return persistUsersConfig(next.users);
+    });
+    const responseUser = state.users[admin.id] || Object.values(state.users).find((user) => user.role === "admin");
+    const bootstrap = buildBootstrap(responseUser);
+    await saveState(state);
+    sendJson(res, 200, { ok: true, config: updated, bootstrap });
+    return;
+  }
+
+  const adminUserMatch = pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+  if (adminUserMatch && req.method === "PUT") {
+    const admin = requireAdmin(req);
+    const targetId = sanitizeId(decodeURIComponent(adminUserMatch[1]));
+    const body = await readBody(req);
+    const cleanUser = sanitizeConfigUser(body.user || body);
+    const updated = await queueMutation(async () => {
+      const currentUsers = (await loadConfig()).users;
+      const existingIndex = currentUsers.findIndex((user) => user.id === targetId);
+      if (existingIndex >= 0 && cleanUser.id !== targetId) {
+        throw Object.assign(new Error("已有账号不能修改用户ID"), { statusCode: 400 });
+      }
+      const nextUsers = existingIndex >= 0
+        ? currentUsers.map((user, index) => (index === existingIndex ? cleanUser : user))
+        : [...currentUsers, cleanUser];
+      return persistUsersConfig(sanitizeConfigUsers(nextUsers));
+    });
+    const responseUser = state.users[admin.id] || Object.values(state.users).find((user) => user.role === "admin");
+    const bootstrap = buildBootstrap(responseUser);
+    await saveState(state);
+    sendJson(res, 200, { ok: true, config: updated, bootstrap });
+    return;
+  }
+
+  if (adminUserMatch && req.method === "DELETE") {
+    const admin = requireAdmin(req);
+    const targetId = sanitizeId(decodeURIComponent(adminUserMatch[1]));
+    const updated = await queueMutation(async () => {
+      const currentUsers = (await loadConfig()).users;
+      if (!currentUsers.some((user) => user.id === targetId)) {
+        throw Object.assign(new Error("账号不存在"), { statusCode: 404 });
+      }
+      return persistUsersConfig(sanitizeConfigUsers(currentUsers.filter((user) => user.id !== targetId)));
     });
     const responseUser = state.users[admin.id] || Object.values(state.users).find((user) => user.role === "admin");
     const bootstrap = buildBootstrap(responseUser);
@@ -486,19 +583,31 @@ async function serveStatic(req, res, pathname) {
     const stats = await fs.stat(candidate);
     const file = stats.isDirectory() ? path.join(candidate, "index.html") : candidate;
     const ext = path.extname(file);
-    const body = await fs.readFile(file);
+    const rawBody = await fs.readFile(file);
+    const acceptsGzip = /\bgzip\b/.test(req.headers["accept-encoding"] || "");
+    const body = acceptsGzip && COMPRESSIBLE_TYPES.has(ext) && rawBody.length >= 1024 ? gzipSync(rawBody) : rawBody;
+    const isVersioned = new URL(req.url, "http://localhost").searchParams.has("v");
+    const cacheHeaders = ext === ".html"
+      ? NO_CACHE_HEADERS
+      : isVersioned
+        ? VERSIONED_STATIC_CACHE_HEADERS
+        : STATIC_CACHE_HEADERS;
     res.writeHead(200, {
       "content-type": MIME_TYPES[ext] || "application/octet-stream",
       "content-length": body.length,
-      "cache-control": ext === ".html" ? "no-store" : "public, max-age=86400"
+      ...(body !== rawBody ? { "content-encoding": "gzip", vary: "Accept-Encoding" } : {}),
+      ...cacheHeaders
     });
     res.end(body);
   } catch (error) {
-    const body = await fs.readFile(path.join(paths.publicDir, "index.html"));
+    const rawBody = await fs.readFile(path.join(paths.publicDir, "index.html"));
+    const acceptsGzip = /\bgzip\b/.test(req.headers["accept-encoding"] || "");
+    const body = acceptsGzip && rawBody.length >= 1024 ? gzipSync(rawBody) : rawBody;
     res.writeHead(200, {
       "content-type": MIME_TYPES[".html"],
       "content-length": body.length,
-      "cache-control": "no-store"
+      ...(body !== rawBody ? { "content-encoding": "gzip", vary: "Accept-Encoding" } : {}),
+      ...NO_CACHE_HEADERS
     });
     res.end(body);
   }

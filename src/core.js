@@ -16,10 +16,13 @@ export const ROUND_ORDER = [
 ];
 
 export const BET_MIN_STAKE = 1;
-export const BET_MAX_STAKE = 50;
-export const AUTO_DEDUCTION_STAKE = 25;
-export const AUTO_DEDUCTION_REASON = "比赛开始未下注，自动扣除 25 筹码";
-export const AUTO_DEDUCTION_START_DATE = "2026-06-13";
+export const GROUP_STAGE_MAX_STAKE = 50;
+export const KNOCKOUT_MAX_STAKE = 100;
+export const FINAL_STAGE_MAX_STAKE = 150;
+export const AUTO_DEDUCTION_STAKE = 50;
+export const AUTO_DEDUCTION_REASON = "比赛开始未下注，自动扣除 50 筹码";
+export const AUTO_DEDUCTION_START_DATE = "2026-06-12";
+export const ODDS_UNAVAILABLE_MESSAGE = "未拉取真实赔率，请联系管理员";
 
 export function nowIso() {
   return new Date().toISOString();
@@ -83,6 +86,10 @@ export function roundOdds(value) {
   return Math.round(Number(value) * 100) / 100;
 }
 
+export function roundAmount(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
 export function normalizeMatches(source, config) {
   const matches = Array.isArray(source?.matches) ? source.matches : [];
   return matches.map((raw, index) => {
@@ -111,6 +118,17 @@ export function getOdds(match, state, config) {
   const synced = state.oddsCache?.matches?.[match.id]?.odds;
   const configured = config.oddsOverrides?.[match.id];
   return normalizeOdds(override || synced || configured || generatedOdds(match.id, config.defaultOdds));
+}
+
+export function getOddsSource(match, state, config) {
+  if (state.overrides?.[match.id]?.odds) return "manual";
+  if (state.oddsCache?.matches?.[match.id]?.odds) return "online";
+  if (config.oddsOverrides?.[match.id]) return "configured";
+  return "default";
+}
+
+export function hasUpdatedOdds(match, state, config) {
+  return ["manual", "online"].includes(getOddsSource(match, state, config));
 }
 
 export function normalizeOdds(odds) {
@@ -165,6 +183,7 @@ export function decorateMatch(match, state, config, now = Date.now()) {
   return {
     ...match,
     odds: getOdds(match, state, config),
+    oddsSource: getOddsSource(match, state, config),
     score,
     scoreText: formatScore(score),
     outcome,
@@ -183,10 +202,20 @@ export function isMatchLocked(match, now = Date.now()) {
   return now >= new Date(match.startAt).getTime();
 }
 
-export function assertBetInput(input) {
+export function getBetMaxStake(match) {
+  if (["Final", "Match for third place"].includes(match?.round)) {
+    return FINAL_STAGE_MAX_STAKE;
+  }
+  if (!match?.group) {
+    return KNOCKOUT_MAX_STAKE;
+  }
+  return GROUP_STAGE_MAX_STAKE;
+}
+
+export function assertBetInput(input, maxStake = GROUP_STAGE_MAX_STAKE) {
   const stake = Number(input.stake);
-  if (!Number.isInteger(stake) || stake < BET_MIN_STAKE || stake > BET_MAX_STAKE) {
-    throw Object.assign(new Error("投注金额必须为 1-50 的整数"), { statusCode: 400 });
+  if (!Number.isInteger(stake) || stake < BET_MIN_STAKE || stake > maxStake) {
+    throw Object.assign(new Error(`投注金额必须为 1-${maxStake} 的整数`), { statusCode: 400 });
   }
   if (!["home", "draw", "away"].includes(input.pick)) {
     throw Object.assign(new Error("请选择有效赛果"), { statusCode: 400 });
@@ -197,11 +226,14 @@ export function assertBetInput(input) {
 export function createBet(state, config, userId, input, now = Date.now()) {
   const user = state.users[userId];
   if (!user) throw Object.assign(new Error("用户不存在"), { statusCode: 401 });
-  const { stake, pick, multiplier } = assertBetInput(input);
   const match = state.sourceCache.matches.find((item) => item.id === input.matchId);
   if (!match) throw Object.assign(new Error("比赛不存在"), { statusCode: 404 });
+  const { stake, pick, multiplier } = assertBetInput(input, getBetMaxStake(match));
   if (isMatchLocked(match, now)) {
     throw Object.assign(new Error("比赛已经开始，不能下注或修改"), { statusCode: 409 });
+  }
+  if (!hasUpdatedOdds(match, state, config)) {
+    throw Object.assign(new Error(ODDS_UNAVAILABLE_MESSAGE), { statusCode: 409 });
   }
   const existingBet = state.bets.find(
     (bet) => bet.userId === userId && bet.matchId === match.id && bet.status !== "cancelled"
@@ -214,7 +246,7 @@ export function createBet(state, config, userId, input, now = Date.now()) {
   }
 
   const odds = getOdds(match, state, config)[pick];
-  user.chips -= stake;
+  user.chips = roundAmount(user.chips - stake);
 
   const bet = {
     id: crypto.randomUUID(),
@@ -223,6 +255,7 @@ export function createBet(state, config, userId, input, now = Date.now()) {
     pick,
     stake,
     odds,
+    oddsSource: getOddsSource(match, state, config),
     multiplier,
     status: "open",
     payout: 0,
@@ -240,27 +273,77 @@ export function updateBet(state, config, userId, betId, input, now = Date.now())
   const match = state.sourceCache.matches.find((item) => item.id === bet.matchId);
   if (!match) throw Object.assign(new Error("比赛不存在"), { statusCode: 404 });
   if (isMatchLocked(match, now)) throw Object.assign(new Error("比赛已经开始，不能修改"), { statusCode: 409 });
+  if (!hasUpdatedOdds(match, state, config)) {
+    throw Object.assign(new Error(ODDS_UNAVAILABLE_MESSAGE), { statusCode: 409 });
+  }
 
   const next = assertBetInput({
     matchId: bet.matchId,
     pick: input.pick || bet.pick,
     stake: input.stake ?? bet.stake,
     multiplier: input.multiplier ?? bet.multiplier
-  });
+  }, getBetMaxStake(match));
   const user = state.users[userId];
-  const availableChips = user.chips + bet.stake;
+  const availableChips = roundAmount(user.chips + bet.stake);
 
   if (availableChips < next.stake) {
     throw Object.assign(new Error("投注金额不能超过当前筹码"), { statusCode: 400 });
   }
 
-  user.chips = availableChips - next.stake;
+  user.chips = roundAmount(availableChips - next.stake);
   bet.pick = next.pick;
   bet.stake = next.stake;
   bet.multiplier = next.multiplier;
   bet.odds = getOdds(match, state, config)[next.pick];
+  bet.oddsSource = getOddsSource(match, state, config);
   bet.updatedAt = new Date(now).toISOString();
   return bet;
+}
+
+export function refreshOpenBetOdds(state, config, now = Date.now()) {
+  const updatedAt = new Date(now).toISOString();
+  const matches = new Map((state.sourceCache?.matches || []).map((match) => [match.id, match]));
+  const summary = {
+    cancelledCount: 0,
+    refreshedCount: 0,
+    changedOddsCount: 0,
+    refundedAmount: 0,
+    missingUserCount: 0
+  };
+
+  for (const bet of state.bets || []) {
+    if (bet.type === "auto-deduction" || bet.status !== "open") continue;
+    const match = matches.get(bet.matchId);
+    const oddsSource = match ? getOddsSource(match, state, config) : "missing";
+
+    if (!match || !hasUpdatedOdds(match, state, config)) {
+      const user = state.users[bet.userId];
+      if (user) {
+        user.chips = roundAmount(Number(user.chips || 0) + Number(bet.stake || 0));
+        summary.refundedAmount = roundAmount(summary.refundedAmount + Number(bet.stake || 0));
+      } else {
+        summary.missingUserCount += 1;
+      }
+      bet.status = "cancelled";
+      bet.oddsSource = oddsSource;
+      bet.cancelReason = ODDS_UNAVAILABLE_MESSAGE;
+      bet.refundedAt = user ? updatedAt : null;
+      bet.updatedAt = updatedAt;
+      summary.cancelledCount += 1;
+      continue;
+    }
+
+    const nextOdds = getOdds(match, state, config)[bet.pick];
+    if (Number(bet.odds) !== Number(nextOdds)) {
+      bet.odds = nextOdds;
+      summary.changedOddsCount += 1;
+    }
+    bet.oddsSource = oddsSource;
+    bet.updatedAt = updatedAt;
+    summary.refreshedCount += 1;
+  }
+
+  return summary;
 }
 
 export function cancelBet(state, userId, betId, now = Date.now()) {
@@ -272,7 +355,7 @@ export function cancelBet(state, userId, betId, now = Date.now()) {
   if (isMatchLocked(match, now)) throw Object.assign(new Error("比赛已经开始，不能取消"), { statusCode: 409 });
 
   const user = state.users[userId];
-  user.chips += bet.stake;
+  user.chips = roundAmount(user.chips + bet.stake);
   bet.status = "cancelled";
   bet.updatedAt = new Date(now).toISOString();
   return bet;
@@ -287,9 +370,9 @@ export function settleMatch(state, match, now = Date.now()) {
     const user = state.users[bet.userId];
     if (!user) continue;
     if (bet.pick === outcome) {
-      bet.payout = Math.round(bet.stake * bet.odds);
+      bet.payout = roundAmount(bet.stake * bet.odds);
       bet.status = "settled";
-      user.chips += bet.payout;
+      user.chips = roundAmount(user.chips + bet.payout);
     } else {
       bet.payout = 0;
       bet.status = "lost";
@@ -334,7 +417,7 @@ export function applyAutoDeductions(state, config, now = Date.now()) {
         && bet.status !== "cancelled"
       ));
       if (hasRecord) continue;
-      user.chips = Number(user.chips || 0) - AUTO_DEDUCTION_STAKE;
+      user.chips = roundAmount(Number(user.chips || 0) - AUTO_DEDUCTION_STAKE);
       const deduction = {
         id: crypto.randomUUID(),
         type: "auto-deduction",
@@ -355,6 +438,165 @@ export function applyAutoDeductions(state, config, now = Date.now()) {
     }
   }
   return deductions;
+}
+
+function openStakeByUser(state) {
+  const openStakeByUser = new Map();
+  for (const bet of state.bets || []) {
+    if (bet.type === "auto-deduction" || bet.status !== "open") continue;
+    openStakeByUser.set(
+      bet.userId,
+      roundAmount(Number(openStakeByUser.get(bet.userId) || 0) + Number(bet.stake || 0))
+    );
+  }
+  return openStakeByUser;
+}
+
+export function buildLeaderboard(state) {
+  const openStakes = openStakeByUser(state);
+  return Object.values(state.users || {})
+    .map((user) => ({
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      chips: roundAmount(Number(user.chips || 0) + Number(openStakes.get(user.id) || 0))
+    }))
+    .sort((a, b) => (
+      b.chips - a.chips
+      || String(a.name || "").localeCompare(String(b.name || ""), "zh-CN")
+    ));
+}
+
+export function buildDashboard(state, config) {
+  const users = Object.values(state.users || {});
+  const openStakes = openStakeByUser(state);
+  const matches = new Map((state.sourceCache?.matches || []).map((match) => [match.id, match]));
+  const settledBets = (state.bets || []).filter((bet) => (
+    bet.type !== "auto-deduction"
+    && (bet.status === "settled" || bet.status === "lost")
+  ));
+
+  const players = users.map((user) => {
+    const userBets = settledBets.filter((bet) => bet.userId === user.id);
+    const wonBets = userBets.filter((bet) => bet.status === "settled");
+    const wagered = roundAmount(userBets.reduce((sum, bet) => sum + Number(bet.stake || 0), 0));
+    const payout = roundAmount(wonBets.reduce((sum, bet) => sum + Number(bet.payout || 0), 0));
+    return {
+      id: user.id,
+      name: user.name,
+      settledBets: userBets.length,
+      wins: wonBets.length,
+      winRate: userBets.length ? Math.round((wonBets.length / userBets.length) * 1000) / 10 : 0,
+      wagered,
+      payout,
+      netProfit: roundAmount(payout - wagered),
+      currentChips: roundAmount(user.chips || 0),
+      realizedChips: roundAmount(Number(user.chips || 0) + Number(openStakes.get(user.id) || 0)),
+      initialChips: 0
+    };
+  });
+
+  const eventsByMatch = new Map();
+  const timelineBets = (state.bets || []).filter((bet) => (
+    (bet.type === "auto-deduction" && bet.status === "deducted")
+    || (bet.type !== "auto-deduction" && (bet.status === "settled" || bet.status === "lost"))
+  ));
+
+  for (const bet of timelineBets) {
+    const match = matches.get(bet.matchId);
+    if (!match) continue;
+    if (!eventsByMatch.has(match.id)) {
+      eventsByMatch.set(match.id, {
+        matchId: match.id,
+        displayNo: match.displayNo,
+        startAt: match.startAt,
+        label: `${match.team1} vs ${match.team2}`,
+        changes: new Map()
+      });
+    }
+    const event = eventsByMatch.get(match.id);
+    const delta = roundAmount(bet.type === "auto-deduction" || bet.status === "lost"
+      ? -Number(bet.stake || 0)
+      : Number(bet.payout || 0) - Number(bet.stake || 0));
+    event.changes.set(
+      bet.userId,
+      roundAmount(Number(event.changes.get(bet.userId) || 0) + delta)
+    );
+  }
+
+  const events = [...eventsByMatch.values()].sort((a, b) => (
+    new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+    || Number(a.displayNo || 0) - Number(b.displayNo || 0)
+  ));
+  const points = [
+    {
+      id: "initial",
+      matchId: null,
+      displayNo: null,
+      startAt: null,
+      label: "初始筹码"
+    },
+    ...events.map(({ changes, ...event }) => ({ id: event.matchId, ...event }))
+  ];
+  const series = players.map((player) => {
+    const realizedChange = roundAmount(events.reduce(
+      (sum, event) => sum + Number(event.changes.get(player.id) || 0),
+      0
+    ));
+    player.initialChips = roundAmount(player.realizedChips - realizedChange);
+    let chips = player.initialChips;
+    const values = [chips];
+    for (const event of events) {
+      chips = roundAmount(chips + Number(event.changes.get(player.id) || 0));
+      values.push(chips);
+    }
+    return {
+      userId: player.id,
+      name: player.name,
+      values
+    };
+  });
+  const totalCurrentChips = roundAmount(players.reduce(
+    (sum, player) => sum + Number(player.realizedChips || 0),
+    0
+  ));
+  const chipDistribution = players
+    .map((player) => {
+      const share = totalCurrentChips > 0
+        ? (Number(player.realizedChips || 0) / totalCurrentChips) * 100
+        : 0;
+      return {
+        userId: player.id,
+        name: player.name,
+        chips: player.realizedChips,
+        share: roundAmount(share),
+        prize: roundAmount((share / 100) * 1000)
+      };
+    })
+    .sort((a, b) => (
+      b.share - a.share
+      || String(a.name || "").localeCompare(String(b.name || ""), "zh-CN")
+    ));
+
+  return {
+    summary: {
+      participantCount: players.length,
+      settledBetCount: players.reduce((sum, player) => sum + player.settledBets, 0),
+      settledStake: roundAmount(players.reduce((sum, player) => sum + player.wagered, 0)),
+      totalPayout: roundAmount(players.reduce((sum, player) => sum + player.payout, 0))
+    },
+    chipPool: {
+      totalChips: totalCurrentChips,
+      prizePool: 1000,
+      distribution: chipDistribution
+    },
+    players,
+    timeline: {
+      points,
+      series
+    }
+  };
 }
 
 export function buildGroups(matches) {

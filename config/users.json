@@ -6,7 +6,7 @@
       "password": "gy860624",
       "name": "关",
       "role": "admin",
-      "initialChips": 5000
+      "initialChips": 6000
     },
     {
       "id": "ops",
@@ -14,7 +14,7 @@
       "password": "zhaofanchao123456",
       "name": "赵",
       "role": "player",
-      "initialChips": 4823
+      "initialChips": 5823
     },
     {
       "id": "player1",
@@ -22,7 +22,7 @@
       "password": "fanyong123456",
       "name": "范",
       "role": "player",
-      "initialChips": 5000
+      "initialChips": 6000
     },
     {
       "id": "player2",
@@ -30,7 +30,7 @@
       "password": "shishuo123456",
       "name": "石",
       "role": "player",
-      "initialChips": 5000
+      "initialChips": 6000
     },
     {
       "id": "player3",
@@ -38,7 +38,7 @@
       "password": "zhongshan123456",
       "name": "钟",
       "role": "player",
-      "initialChips": 5000
+      "initialChips": 6000
     }
   ]
 }

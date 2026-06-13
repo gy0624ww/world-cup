@@ -2,13 +2,11 @@
 <html lang="zh-CN" data-theme="worldcup">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="base-path" content="/world-cup">
     <meta name="description" content="多人世界杯竞猜、赛程、对阵图和筹码结算平台。">
     <title>World Cup 竞猜中心</title>
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css">
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <link rel="stylesheet" href="./assets/styles.css?v=20260612e">
+    <link rel="stylesheet" href="./assets/styles.css?v=20260613c">
   </head>
   <body class="auth-loading">
     <div id="auth-loading-screen" class="auth-loading-screen">
@@ -67,7 +65,9 @@
 
     <div id="app-shell" class="app-shell hidden">
       <aside id="side-nav" class="side-nav">
-        <button class="icon-btn nav-collapse" data-action="toggle-nav" aria-label="收起导航">☰</button>
+        <button class="icon-btn nav-collapse" data-action="toggle-nav" aria-label="收起导航">
+          <i data-lucide="panel-left-close" aria-hidden="true"></i>
+        </button>
         <div class="profile-block">
           <div class="avatar-ring" id="profile-initial">W</div>
           <div class="profile-copy">
@@ -76,14 +76,15 @@
           </div>
         </div>
         <nav class="menu-nav">
-          <button class="nav-item active" data-view="matches"><span>⚽</span><b>赛事中心</b></button>
-          <button class="nav-item" data-view="bracket"><span>🏆</span><b>对阵图</b></button>
-          <button class="nav-item" data-view="bets"><span>▣</span><b>我的投注</b></button>
-          <button class="nav-item admin-only" data-view="admin"><span>⚙</span><b>结果管理</b></button>
-          <button class="nav-item admin-only" data-view="config"><span>☷</span><b>系统配置</b></button>
+          <button class="nav-item active" data-view="matches"><span class="nav-icon"><i data-lucide="calendar-days" aria-hidden="true"></i></span><b>赛事中心</b></button>
+          <button class="nav-item" data-view="dashboard"><span class="nav-icon"><i data-lucide="bar-chart-3" aria-hidden="true"></i></span><b>数据看板</b></button>
+          <button class="nav-item" data-view="bracket"><span class="nav-icon"><i data-lucide="trophy" aria-hidden="true"></i></span><b>对阵图</b></button>
+          <button class="nav-item" data-view="bets"><span class="nav-icon"><i data-lucide="ticket-check" aria-hidden="true"></i></span><b>我的投注</b></button>
+          <button class="nav-item admin-only" data-view="admin"><span class="nav-icon"><i data-lucide="shield-check" aria-hidden="true"></i></span><b>结果管理</b></button>
+          <button class="nav-item admin-only" data-view="config"><span class="nav-icon"><i data-lucide="settings" aria-hidden="true"></i></span><b>系统配置</b></button>
         </nav>
         <div class="side-foot">
-          <button class="nav-item" data-action="logout"><span>↩</span><b>退出登录</b></button>
+          <button class="nav-item" data-action="logout"><span class="nav-icon"><i data-lucide="log-out" aria-hidden="true"></i></span><b>退出登录</b></button>
         </div>
       </aside>
 
@@ -99,7 +100,7 @@
               <span>筹码</span>
               <strong id="chip-balance">0</strong>
             </div>
-            <button class="btn cyber-slip-btn btn-sm" data-action="toggle-slip">
+            <button class="btn cyber-slip-btn btn-sm" data-action="toggle-slip" aria-controls="bet-slip" aria-expanded="true">
               <span class="cyber-slip-dot"></span>
               <span>投注单</span>
             </button>
@@ -111,7 +112,7 @@
           <div class="section-heading">
             <div>
               <p class="kicker">MATCH CENTER</p>
-              <h3>进行中 & 即将开始</h3>
+              <h3>进行中 &amp; 即将开始</h3>
             </div>
             <div class="join filter-tabs">
               <button class="btn join-item btn-sm active" data-filter="all">全部</button>
@@ -121,6 +122,90 @@
             </div>
           </div>
           <div id="matches-grid" class="matches-grid"></div>
+        </section>
+
+        <section id="view-dashboard" class="view-panel">
+          <div class="section-heading dashboard-heading">
+            <div>
+              <p class="kicker">PLAYER ANALYTICS</p>
+              <h3>竞猜数据看板</h3>
+              <p class="dashboard-description">基于已结算竞猜，查看每位竞猜人员的胜率、筹码收益与赛程表现。</p>
+            </div>
+          </div>
+          <div id="dashboard-summary" class="dashboard-summary"></div>
+          <div class="dashboard-grid">
+            <article class="dashboard-card dashboard-chip-pool-card">
+              <div class="dashboard-card-head chip-pool-head">
+                <div>
+                  <p class="kicker">CHIP OWNERSHIP</p>
+                  <h4>当前总权益占比与奖金分配</h4>
+                  <span>总权益包含可用筹码与未结算下注本金，实时拆分 ¥1,000 总奖池</span>
+                </div>
+                <div class="prize-pool-badge">
+                  <span>总奖池</span>
+                  <strong>¥1,000</strong>
+                </div>
+              </div>
+              <div id="dashboard-chip-pool" class="dashboard-chip-pool"></div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <div>
+                  <h4>已结算竞猜次数</h4>
+                  <span>每人已完成结算的有效竞猜</span>
+                </div>
+              </div>
+              <div id="dashboard-settled-chart" class="comparison-list"></div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <div>
+                  <h4>胜率对比</h4>
+                  <span>赢单数占已结算竞猜数的比例</span>
+                </div>
+              </div>
+              <div id="dashboard-win-rate-chart" class="comparison-list"></div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <div>
+                  <h4>净赚筹码对比</h4>
+                  <span>累计返还筹码减去已结算下注筹码</span>
+                </div>
+              </div>
+              <div id="dashboard-profit-chart" class="comparison-list"></div>
+            </article>
+            <article class="dashboard-card">
+              <div class="dashboard-card-head">
+                <div>
+                  <h4>下注筹码对比</h4>
+                  <span>每人已结算竞猜的累计下注筹码</span>
+                </div>
+              </div>
+              <div id="dashboard-wagered-chart" class="comparison-list"></div>
+            </article>
+            <article class="dashboard-card dashboard-timeline-card">
+              <div class="dashboard-card-head timeline-card-head">
+                <div>
+                  <h4>赛后已实现筹码走势</h4>
+                  <span>按比赛日程累计赢单、输单与未下注自动扣除，不包含未结算竞猜</span>
+                </div>
+                <div id="dashboard-chart-legend" class="dashboard-chart-legend" aria-label="选择折线图人员"></div>
+              </div>
+              <div id="dashboard-timeline-shell" class="dashboard-timeline-shell">
+                <div class="dashboard-timeline-scroll">
+                  <canvas id="dashboard-timeline-canvas" height="420" role="img" aria-label="每位竞猜人员按比赛日程变化的赛后已实现筹码折线图">
+                    当前浏览器不支持 Canvas，请使用下方数据表查看筹码变化。
+                  </canvas>
+                </div>
+                <div id="dashboard-chart-tooltip" class="dashboard-chart-tooltip hidden" role="status"></div>
+              </div>
+              <details class="dashboard-data-details">
+                <summary>查看筹码走势数据表</summary>
+                <div id="dashboard-data-table" class="dashboard-data-table"></div>
+              </details>
+            </article>
+          </div>
         </section>
 
         <section id="view-bracket" class="view-panel">
@@ -168,7 +253,10 @@
       </main>
 
       <aside id="bet-slip" class="bet-slip">
-        <button class="slip-toggle" data-action="toggle-slip" aria-label="展开或收起投注单">›</button>
+        <button class="slip-toggle" data-action="toggle-slip" aria-controls="bet-slip" aria-expanded="true" aria-label="收起我的投注">
+          <span class="slip-toggle-icon" aria-hidden="true"><i data-lucide="chevron-left"></i></span>
+          <span class="slip-toggle-label">我的下注</span>
+        </button>
         <div class="slip-content">
           <div class="slip-head">
             <div>
@@ -180,7 +268,7 @@
           <form id="bet-form" class="bet-form" novalidate>
             <div id="market-buttons" class="market-buttons"></div>
             <label class="form-control">
-              <span class="label-text">投注金额</span>
+              <span class="label-text">投注金额 <strong id="stake-limit" class="stake-limit">本场最高 50 筹码</strong></span>
               <input id="stake-input" class="input input-bordered" type="number" min="1" max="50" step="1" value="25">
             </label>
             <div>
@@ -208,6 +296,6 @@
     </div>
 
     <div id="toast" class="toast toast-end"></div>
-    <script src="./assets/app.js?v=20260612f" type="module"></script>
+    <script src="./assets/app.js?v=20260613c" type="module"></script>
   </body>
 </html>
